@@ -10,6 +10,7 @@ import {
 import "./App.css";
 
 function App() {
+  const [cmcSkillHub, setCmcSkillHub] = useState(null);
   const [coin, setCoin] = useState("BNB");
   const [timeframe, setTimeframe] = useState("4H");
   const [risk, setRisk] = useState("medium");
@@ -288,6 +289,17 @@ Best eligible risk-adjusted score among all tested combinations.
           initial_capital: initialCapital
         })
       });
+
+try {
+  const skillResponse = await fetch(`${import.meta.env.VITE_API_URL}/cmc-skill-hub/find?query=btc%20price`);
+  const skillData = await skillResponse.json();
+  setCmcSkillHub(skillData);
+} catch (error) {
+  setCmcSkillHub({
+    ok: false,
+    error: "CMC Skill Hub unavailable"
+  });
+}
 
       const data = await response.json();
       const best = data.best_setup;
@@ -592,6 +604,22 @@ Best eligible risk-adjusted score among all tested combinations.
           )}
 
           <h2>DETAILS</h2>
+
+<details>
+  <summary>CMC SKILL HUB</summary>
+
+  <div className="metrics">
+    <p>STATUS.............. {cmcSkillHub?.ok ? "ACTIVE" : "UNAVAILABLE"}</p>
+    <p>QUERY............... btc price</p>
+    <p>SOURCE.............. CMC Skill Hub MCP</p>
+    <p>
+      TOP SKILL...........{" "}
+      {cmcSkillHub?.result?.content?.[0]?.text
+        ? JSON.parse(cmcSkillHub.result.content[0].text).candidates?.[0]?.uniqueName
+        : "N/A"}
+    </p>
+  </div>
+</details>
 
           {result.cmc_signal && (
             <details>
