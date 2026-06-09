@@ -3,7 +3,7 @@ import pandas as pd
 
 
 def fetch_binance_klines(symbol: str, interval: str = "4h", limit: int = 500):
-    url = "https://api.binance.com/api/v3/klines"
+    url = "https://api.binance.us/api/v3/klines"
 
     params = {
         "symbol": symbol.upper(),
