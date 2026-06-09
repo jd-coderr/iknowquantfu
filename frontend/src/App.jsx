@@ -470,17 +470,20 @@ Best eligible risk-adjusted score among all tested combinations.
             </select>
           </div>
 <div>
-  <label>INITIAL CAPITAL</label>
+   <label>INITIAL CAPITAL</label>
+
   <div className="capital-input">
-  <span>$</span>
-  <input
-    type="number"
-    min="100"
-    step="100"
-    value={initialCapital}
-    disabled={loading}
-    onChange={(e) => setInitialCapital(Number(e.target.value))}
-  />
+    <span>$</span>
+
+    <input
+      type="number"
+      min="100"
+      step="100"
+      value={initialCapital}
+      disabled={loading}
+      onChange={(e) => setInitialCapital(Number(e.target.value))}
+    />
+  </div>
 </div>
 
           <button onClick={generateStrategy} disabled={loading}>
