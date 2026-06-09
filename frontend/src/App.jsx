@@ -652,7 +652,7 @@ Best eligible risk-adjusted score among all tested combinations.
 
           {result.cmc_signal && (
             <details>
-<p>
+<p></p>
 
               <summary>MARKET INTELLIGENCE</summary>
 
