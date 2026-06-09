@@ -1,6 +1,20 @@
 from cmc_skill_hub import find_cmc_skill
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://www.bergmanntrading.com",
+        "https://bergmanntrading.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 from pathlib import Path
 from pydantic import BaseModel
 from backtest import run_backtest
