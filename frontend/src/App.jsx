@@ -292,7 +292,10 @@ Best eligible risk-adjusted score among all tested combinations.
       });
 
 try {
-  const skillResponse = await fetch(`${import.meta.env.VITE_API_URL}/cmc-skill-hub/find?query=btc%20price`);
+const skillQuery = `${coin} strategy`;
+const skillResponse = await fetch(
+  `${import.meta.env.VITE_API_URL}/cmc-skill-hub/find?query=${encodeURIComponent(skillQuery)}`
+);
   const skillData = await skillResponse.json();
   setCmcSkillHub(skillData);
 } catch (error) {
@@ -609,7 +612,9 @@ try {
 
   <div className="metrics">
     <p>STATUS.............. {cmcSkillHub?.ok ? "ACTIVE" : "UNAVAILABLE"}</p>
-    <p>QUERY............... btc price</p>
+    <p>SELECTED ASSET...... {result.coin}</p>
+<p>QUERY............... {result.coin} strategy</p>
+<p>CURRENT STRATEGY.... {result.selected_strategy}</p>
     <p>SOURCE.............. CMC Skill Hub MCP</p>
     <p>
       TOP SKILL...........{" "}
