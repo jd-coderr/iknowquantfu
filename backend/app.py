@@ -182,12 +182,12 @@ def optimize_strategy(request: OptimizeRequest):
                     "risk_governor": strategy["risk_governor"]
                 })
 
-    eligible_results = [
+        eligible_results = [
         item for item in results
         if is_backtest_eligible(item["backtest"])
     ]
 
-        ranking_pool = eligible_results if eligible_results else results
+    ranking_pool = eligible_results if eligible_results else results
 
     if not ranking_pool:
         return {
