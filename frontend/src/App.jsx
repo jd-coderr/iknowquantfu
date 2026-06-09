@@ -634,59 +634,60 @@ Best eligible risk-adjusted score among all tested combinations.
             </>
           )}
 
-              {cmcSkillHub && (
+{cmcSkillHub && (
   <>
     <h2>COINMARKETCAP SKILL HUB COMPARISON</h2>
 
-<div className="metrics">
-  <p>STATUS.............. {cmcSkillHub?.ok ? "ACTIVE" : "UNAVAILABLE"}</p>
-  <p>SELECTED ASSET...... {result.coin}</p>
-  <p>OPTIMIZED STRATEGY.. {result.selected_strategy}</p>
+    <div className="metrics">
+      <p>STATUS.............. {cmcSkillHub?.ok ? "ACTIVE" : "UNAVAILABLE"}</p>
+      <p>SELECTED ASSET...... {result.coin}</p>
+      <p>OPTIMIZED STRATEGY.. {result.selected_strategy}</p>
 
-  <br />
+      <br />
 
-  <p>PRIMARY CMC SKILL... daily_market_overview</p>
-  <p>SKILL MODE.......... preview: true</p>
-  <p>CMC ANALYST ROLE.... DAILY MARKET REGIME ANALYSIS</p>
-  <p>REPORT STYLE........ TL;DR + DETAILS</p>
+      <p>PRIMARY CMC SKILL... daily_market_overview</p>
+      <p>SKILL MODE.......... preview: true</p>
+      <p>CMC ANALYST ROLE.... DAILY MARKET REGIME ANALYSIS</p>
+      <p>REPORT STYLE........ TL;DR + DETAILS</p>
 
-  <br />
+      <br />
 
-  <p>TOP MATCHED SKILL... {getCmcTopSkill()}</p>
-  <p>CMC RESEARCH QUERY.. {cmcSkillHub?.query || `${result.coin} strategy`}</p>
-  <p>SOURCE.............. CMC Skill Hub MCP</p>
+      <p>TOP MATCHED SKILL... {getCmcTopSkill()}</p>
+      <p>CMC RESEARCH QUERY.. {cmcSkillHub?.query || `${result.coin} strategy`}</p>
+      <p>SOURCE.............. CMC Skill Hub MCP</p>
 
-  <br />
+      <br />
 
-  <p>CMC VIEW............ EXTERNAL MARKET INTELLIGENCE</p>
-  <p>STRATEGY VIEW....... INTERNAL BACKTESTED EXECUTION MODEL</p>
-  <p>COMPETITION VALUE... CMC AGENT HUB + STRATEGY FORGE OPTIMIZER</p>
-  <p>DECISION IMPACT..... RESEARCH CONFIRMATION ONLY</p>
+      <p>CMC VIEW............ EXTERNAL MARKET INTELLIGENCE</p>
+      <p>STRATEGY VIEW....... INTERNAL BACKTESTED EXECUTION MODEL</p>
+      <p>COMPETITION VALUE... CMC AGENT HUB + STRATEGY FORGE OPTIMIZER</p>
+      <p>DECISION IMPACT..... RESEARCH CONFIRMATION ONLY</p>
 
-  <br />
+      <br />
 
-  <p>
-    MARKET STATE........
-    {result.cmc_signal?.fear_greed?.value <= 25
-      ? " RISK-OFF / EXTREME FEAR"
-      : result.cmc_signal?.fear_greed?.value >= 75
-      ? " RISK-ON / HIGH GREED"
-      : " NEUTRAL MARKET CONDITIONS"}
-  </p>
+      <p>
+        MARKET STATE........
+        {result.cmc_signal?.fear_greed?.value <= 25
+          ? " RISK-OFF / EXTREME FEAR"
+          : result.cmc_signal?.fear_greed?.value >= 75
+          ? " RISK-ON / HIGH GREED"
+          : " NEUTRAL MARKET CONDITIONS"}
+      </p>
 
-  <p>
-    KEY DRIVER.......... Fear & Greed{" "}
-    {result.cmc_signal?.fear_greed?.value ?? "N/A"}/100
-  </p>
+      <p>
+        KEY DRIVER.......... Fear & Greed{" "}
+        {result.cmc_signal?.fear_greed?.value ?? "N/A"}/100
+      </p>
 
-  <p>
-    ALTCOIN ROTATION....{" "}
-    {result.cmc_signal?.altcoin_season?.value ?? "N/A"}/100
-  </p>
+      <p>
+        ALTCOIN ROTATION....{" "}
+        {result.cmc_signal?.altcoin_season?.value ?? "N/A"}/100
+      </p>
 
-  <p>FINAL USE........... SUPPORTS STRATEGY CONTEXT, DOES NOT OVERRIDE BACKTEST</p>
-</div>
-</>
+      <p>FINAL USE........... SUPPORTS STRATEGY CONTEXT, DOES NOT OVERRIDE BACKTEST</p>
+    </div>
+  </>
+)}
 
 <h2>DETAILS</h2>
 
