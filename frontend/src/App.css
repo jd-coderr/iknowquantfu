@@ -546,3 +546,24 @@ text-shadow: none;
   box-shadow:
     0 0 10px rgba(255,255,255,0.5);
 }
+
+details summary {
+  color: #ffffff;
+  font-size: 1.4rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin: 16px 0;
+  list-style: none;
+}
+
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+details summary::before {
+  content: "▶ ";
+}
+
+details[open] summary::before {
+  content: "▼ ";
+}

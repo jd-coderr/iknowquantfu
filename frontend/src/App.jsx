@@ -691,188 +691,21 @@ Best eligible risk-adjusted score among all tested combinations.
 
 <h2>DETAILS</h2>
 
-{result.cmc_signal && (
-  <details>
-    <summary>MARKET INTELLIGENCE</summary>
-
-    <div className="metrics">
-      <p>SOURCE.............. CoinMarketCap.com API</p>
-      <p>STATUS.............. {result.cmc_signal.status}</p>
-      <p>SYMBOL.............. {result.cmc_signal.symbol}</p>
-      <p>PRICE USD........... {formatPrice(result.cmc_signal.price_usd)}</p>
-      <p>CHANGE 1H........... {formatPercent(result.cmc_signal.percent_change_1h)}</p>
-      <p>CHANGE 24H.......... {formatPercent(result.cmc_signal.percent_change_24h)}</p>
-      <p>CHANGE 7D........... {formatPercent(result.cmc_signal.percent_change_7d)}</p>
-      <p>VOLUME 24H.......... {formatMoney(result.cmc_signal.volume_24h)}</p>
-      <p>VOLUME CHANGE 24H... {formatPercent(result.cmc_signal.volume_change_24h)}</p>
-      <p>MARKET CAP.......... {formatMoney(result.cmc_signal.market_cap)}</p>
-      <p>MARKET BIAS......... {String(result.cmc_signal.market_bias).toUpperCase()}</p>
-      <p>
-        FEAR & GREED........ {result.cmc_signal.fear_greed?.value ?? "N/A"} / 100{" "}
-        {String(result.cmc_signal.fear_greed?.label || "UNKNOWN").toUpperCase()}
-      </p>
-      <p>
-        ALTCOIN SEASON...... {result.cmc_signal.altcoin_season?.value ?? "N/A"} / 100{" "}
-        {String(result.cmc_signal.altcoin_season?.label || "UNKNOWN").toUpperCase()}
-      </p>
-    </div>
-  </details>
-)}
-
-            <details>
-            <summary>PERFORMANCE SUMMARY</summary>
-
-            <div className="metrics">
-              <p>COIN................ {result.coin}</p>
-              <p>TIMEFRAME........... {result.timeframe}</p>
-              <p>TEST PERIOD......... {result.backtest.backtest_period}</p>
-              <p>CANDLES TESTED...... {result.backtest.candles_tested}</p>
-              <p>TX COST / TRADE..... {result.backtest.transaction_cost_per_trade}</p>
-              <p>SLIPPAGE............ {result.backtest.slippage_per_trade}</p>
-              <p>TOTAL COST.......... {result.backtest.total_cost_per_trade}</p>
-              <p>RISK MODEL.......... {result.risk}</p>
-              <p>TRADES.............. {result.backtest.trades}</p>
-              <p>WINS................ {result.backtest.wins}</p>
-              <p>LOSSES.............. {result.backtest.losses}</p>
-              <p>WIN RATE............ {result.backtest.win_rate}</p>
-              <p>INITIAL CAPITAL..... {result.backtest.initial_capital}</p>
-              <p>FINAL EQUITY........ {result.backtest.final_equity}</p>
-              <p>NET RETURN.......... {result.backtest.net_return}</p>
-              <p>BUY & HOLD RETURN... {result.backtest.buy_hold_return}</p>
-              <p>VS BUY & HOLD....... {result.backtest.strategy_vs_buy_hold}</p>
-              <p>AVG PNL............. {result.backtest.avg_pnl}</p>
-              <p>LARGEST PROFIT...... {result.backtest.largest_profit}</p>
-              <p>LARGEST LOSS........ {result.backtest.largest_loss}</p>
-              <p>AVG BARS IN TRADE... {result.backtest.avg_bars_in_trade}</p>
-              <p>AVG DD DURATION..... {result.backtest.avg_drawdown_duration}</p>
-              <p>DD / INIT CAPITAL... {result.backtest.max_drawdown_initial_capital}</p>
-              <p>PROFIT FACTOR....... {result.backtest.profit_factor}</p>
-              <p>MAX DRAWDOWN........ {result.backtest.max_drawdown}</p>
-              <p>RECOVERY FACTOR..... {result.backtest.recovery_factor}</p>
-              <p>RISK-ADJUSTED SCORE. {result.backtest.risk_adjusted_score}</p>
-            </div>
-          </details>
-
           <details>
-            <summary>RISK ANALYTICS</summary>
 
-            <div className="metrics">
-              <p>
-                SHARPE RATIO........ {result.backtest.sharpe_ratio}{" "}
-                (
-                {Number(result.backtest.sharpe_ratio) < 0.5
-                  ? "POOR"
-                  : Number(result.backtest.sharpe_ratio) < 1
-                  ? "FAIR"
-                  : Number(result.backtest.sharpe_ratio) < 2
-                  ? "GOOD"
-                  : "EXCELLENT"}
-                )
-              </p>
-              <p>Return earned per unit of volatility.</p>
-              <br />
+            <summary>WHY THIS WAS SELECTED</summary>
 
-              <p>
-                SORTINO RATIO....... {result.backtest.sortino_ratio}{" "}
-                (
-                {Number(result.backtest.sortino_ratio) < 0.5
-                  ? "POOR"
-                  : Number(result.backtest.sortino_ratio) < 1
-                  ? "FAIR"
-                  : Number(result.backtest.sortino_ratio) < 2
-                  ? "GOOD"
-                  : "EXCELLENT"}
-                )
-              </p>
-              <p>Return earned per unit of downside risk.</p>
-              <br />
+ <h2>WHY THIS WAS SELECTED</h2>
 
-              <p>
-                CALMAR RATIO........ {result.backtest.calmar_ratio}{" "}
-                (
-                {Number(result.backtest.calmar_ratio) < 1
-                  ? "POOR"
-                  : Number(result.backtest.calmar_ratio) < 2
-                  ? "FAIR"
-                  : Number(result.backtest.calmar_ratio) < 3
-                  ? "GOOD"
-                  : "EXCELLENT"}
-                )
-              </p>
-              <p>Return achieved relative to maximum drawdown.</p>
-              <br />
-
-              <p>
-                EXPECTANCY.......... {result.backtest.expectancy}{" "}
-                (
-                {parsePercent(result.backtest.expectancy) > 0
-                  ? "POSITIVE EDGE"
-                  : "NEGATIVE EDGE"}
-                )
-              </p>
-              <p>Average expected profit or loss per trade.</p>
-              <p>LONGEST WIN STREAK. {result.backtest.max_win_streak}</p>
-              <p>LONGEST LOSS STREAK {result.backtest.max_loss_streak}</p>
-              <p>AVERAGE WIN........ {result.backtest.avg_win}</p>
-              <p>AVERAGE LOSS....... {result.backtest.avg_loss}</p>
-              <p>PAYOFF RATIO....... {result.backtest.payoff_ratio}</p>
-            </div>
-          </details>
-
-          <details>
-            <summary>VALIDATION CHECKS</summary>
-
-            <div className="metrics">
-              <p>MIN TRADES REQUIRED. {result.backtest.min_trades_required}</p>
-              <p>MIN TRADE GATE...... {result.backtest.min_trade_gate}</p>
-              <p>DRAWDOWN LIMIT...... {result.backtest.drawdown_limit}</p>
-              <p>DRAWDOWN GATE....... {result.backtest.drawdown_gate}</p>
-              <p>
-                {result.backtest.min_trade_gate === "PASS"
-                  ? "✓ MINIMUM TRADES PASSED"
-                  : "✗ MINIMUM TRADES FAILED"}
-              </p>
-              <p>
-                {result.backtest.drawdown_gate === "PASS"
-                  ? "✓ DRAWDOWN LIMIT PASSED"
-                  : "✗ DRAWDOWN LIMIT FAILED"}
-              </p>
-              <p>
-                {parsePercent(result.backtest.expectancy) > 0
-                  ? "✓ POSITIVE EXPECTANCY"
-                  : "✗ NEGATIVE EXPECTANCY"}
-              </p>
-              <p>
-                {Number(result.backtest.profit_factor) > 1
-                  ? "✓ PROFIT FACTOR ABOVE 1"
-                  : "✗ PROFIT FACTOR BELOW 1"}
-              </p>
-              <p>
-                {parsePercent(result.backtest.net_return) > 0
-                  ? "✓ POSITIVE NET RETURN"
-                  : "✗ NEGATIVE NET RETURN"}
-              </p>
-              <p>
-                {parsePercent(result.backtest.strategy_vs_buy_hold) > 0
-                  ? "✓ OUTPERFORMED BUY & HOLD"
-                  : "✗ UNDERPERFORMED BUY & HOLD"}
-              </p>
-            </div>
-          </details>
-
-          <details>
-            <summary>MARKET CONDITIONS</summary>
-
-            <div className="metrics">
-              <p>FIRST HALF MARKET.... {result.backtest.first_half_return}</p>
-              <p>SECOND HALF MARKET... {result.backtest.second_half_return}</p>
-              <p>MARKET TREND GATE.... {result.backtest.consistency_gate}</p>
-            </div>
+            <div className="reason">{result.reason}</div>
           </details>
 
           {result.optimization && (
             <details>
+
               <summary>OPTIMIZATION RESULTS</summary>
+
+  <h2>OPTIMIZATION RESULTS</h2>
 
               <div className="metrics">
                 <p>MODE................ {result.optimization.mode}</p>
@@ -936,38 +769,10 @@ Best eligible risk-adjusted score among all tested combinations.
           )}
 
           <details>
-            <summary>RECENT TRADES</summary>
 
-            <div className="trade-table">
-              <div className="trade-row trade-header">
-                <span>ENTRY TIME</span>
-                <span>EXIT TIME</span>
-                <span>ENTRY</span>
-                <span>EXIT</span>
-                <span>RESULT</span>
-                <span>PNL</span>
-                <span>DURATION</span>
-              </div>
-
-              {result.backtest.recent_trades &&
-                result.backtest.recent_trades.map((trade, index) => (
-                  <div className="trade-row" key={index}>
-                    <span>{trade.entry_time}</span>
-                    <span>{trade.exit_time}</span>
-                    <span>{trade.entry_price}</span>
-                    <span>{trade.exit_price}</span>
-                    <span className={trade.result === "win" ? "trade-win" : "trade-loss"}>
-                      {trade.result.toUpperCase()}
-                    </span>
-                    <span>{trade.pnl_pct}%</span>
-                    <span>{trade.duration}</span>
-                  </div>
-                ))}
-            </div>
-          </details>
-
-          <details>
             <summary>TRADING STRATEGY</summary>
+
+  <h2>TRADING STRATEGY</h2>
 
             <div className="reason">
               <strong>STRATEGY:</strong> {result.selected_strategy}
@@ -1007,13 +812,233 @@ Best eligible risk-adjusted score among all tested combinations.
             </button>
           </details>
 
+{result.cmc_signal && (
+  <details>
+    <summary>MARKET INTELLIGENCE</summary>
+
+    <h2>MARKET INTELLIGENCE</h2>
+
+    <div className="metrics">
+      <p>SOURCE.............. CoinMarketCap.com API</p>
+      <p>STATUS.............. {result.cmc_signal.status}</p>
+      <p>SYMBOL.............. {result.cmc_signal.symbol}</p>
+      <p>PRICE USD........... {formatPrice(result.cmc_signal.price_usd)}</p>
+      <p>CHANGE 1H........... {formatPercent(result.cmc_signal.percent_change_1h)}</p>
+      <p>CHANGE 24H.......... {formatPercent(result.cmc_signal.percent_change_24h)}</p>
+      <p>CHANGE 7D........... {formatPercent(result.cmc_signal.percent_change_7d)}</p>
+      <p>VOLUME 24H.......... {formatMoney(result.cmc_signal.volume_24h)}</p>
+      <p>VOLUME CHANGE 24H... {formatPercent(result.cmc_signal.volume_change_24h)}</p>
+      <p>MARKET CAP.......... {formatMoney(result.cmc_signal.market_cap)}</p>
+      <p>MARKET BIAS......... {String(result.cmc_signal.market_bias).toUpperCase()}</p>
+      <p>
+        FEAR & GREED........ {result.cmc_signal.fear_greed?.value ?? "N/A"} / 100{" "}
+        {String(result.cmc_signal.fear_greed?.label || "UNKNOWN").toUpperCase()}
+      </p>
+      <p>
+        ALTCOIN SEASON...... {result.cmc_signal.altcoin_season?.value ?? "N/A"} / 100{" "}
+        {String(result.cmc_signal.altcoin_season?.label || "UNKNOWN").toUpperCase()}
+      </p>
+    </div>
+  </details>
+)}
+
           <details>
-            <summary>WHY THIS WAS SELECTED</summary>
-            <div className="reason">{result.reason}</div>
+            <summary>VALIDATION CHECKS</summary>
+
+  <h2>VALIDATION CHECKS</h2>
+
+            <div className="metrics">
+              <p>MIN TRADES REQUIRED. {result.backtest.min_trades_required}</p>
+              <p>MIN TRADE GATE...... {result.backtest.min_trade_gate}</p>
+              <p>DRAWDOWN LIMIT...... {result.backtest.drawdown_limit}</p>
+              <p>DRAWDOWN GATE....... {result.backtest.drawdown_gate}</p>
+              <p>
+                {result.backtest.min_trade_gate === "PASS"
+                  ? "✓ MINIMUM TRADES PASSED"
+                  : "✗ MINIMUM TRADES FAILED"}
+              </p>
+              <p>
+                {result.backtest.drawdown_gate === "PASS"
+                  ? "✓ DRAWDOWN LIMIT PASSED"
+                  : "✗ DRAWDOWN LIMIT FAILED"}
+              </p>
+              <p>
+                {parsePercent(result.backtest.expectancy) > 0
+                  ? "✓ POSITIVE EXPECTANCY"
+                  : "✗ NEGATIVE EXPECTANCY"}
+              </p>
+              <p>
+                {Number(result.backtest.profit_factor) > 1
+                  ? "✓ PROFIT FACTOR ABOVE 1"
+                  : "✗ PROFIT FACTOR BELOW 1"}
+              </p>
+              <p>
+                {parsePercent(result.backtest.net_return) > 0
+                  ? "✓ POSITIVE NET RETURN"
+                  : "✗ NEGATIVE NET RETURN"}
+              </p>
+              <p>
+                {parsePercent(result.backtest.strategy_vs_buy_hold) > 0
+                  ? "✓ OUTPERFORMED BUY & HOLD"
+                  : "✗ UNDERPERFORMED BUY & HOLD"}
+              </p>
+            </div>
+          </details>
+
+      <details>
+  <summary>RISK ANALYTICS</summary>
+
+  <h2>RISK ANALYTICS</h2>
+
+  <div className="metrics">
+              <p>
+                SHARPE RATIO........ {result.backtest.sharpe_ratio}{" "}
+                (
+                {Number(result.backtest.sharpe_ratio) < 0.5
+                  ? "POOR"
+                  : Number(result.backtest.sharpe_ratio) < 1
+                  ? "FAIR"
+                  : Number(result.backtest.sharpe_ratio) < 2
+                  ? "GOOD"
+                  : "EXCELLENT"}
+                )
+              </p>
+              <p>Return earned per unit of volatility.</p>
+              <br />
+
+              <p>
+                SORTINO RATIO....... {result.backtest.sortino_ratio}{" "}
+                (
+                {Number(result.backtest.sortino_ratio) < 0.5
+                  ? "POOR"
+                  : Number(result.backtest.sortino_ratio) < 1
+                  ? "FAIR"
+                  : Number(result.backtest.sortino_ratio) < 2
+                  ? "GOOD"
+                  : "EXCELLENT"}
+                )
+              </p>
+              <p>Return earned per unit of downside risk.</p>
+              <br />
+
+              <p>
+                CALMAR RATIO........ {result.backtest.calmar_ratio}{" "}
+                (
+                {Number(result.backtest.calmar_ratio) < 1
+                  ? "POOR"
+                  : Number(result.backtest.calmar_ratio) < 2
+                  ? "FAIR"
+                  : Number(result.backtest.calmar_ratio) < 3
+                  ? "GOOD"
+                  : "EXCELLENT"}
+                )
+              </p>
+              <p>Return achieved relative to maximum drawdown.</p>
+              <br />
+
+              <p>
+                EXPECTANCY.......... {result.backtest.expectancy}{" "}
+                (
+                {parsePercent(result.backtest.expectancy) > 0
+                  ? "POSITIVE EDGE"
+                  : "NEGATIVE EDGE"}
+                )
+              </p>
+              <p>Average expected profit or loss per trade.</p>
+              <p>LONGEST WIN STREAK. {result.backtest.max_win_streak}</p>
+              <p>LONGEST LOSS STREAK {result.backtest.max_loss_streak}</p>
+              <p>AVERAGE WIN........ {result.backtest.avg_win}</p>
+              <p>AVERAGE LOSS....... {result.backtest.avg_loss}</p>
+              <p>PAYOFF RATIO....... {result.backtest.payoff_ratio}</p>
+            </div>
+          </details>
+
+            <details>
+            <summary>PERFORMANCE SUMMARY</summary>
+
+  <h2>PERFORMANCE SUMMARY</h2>
+
+            <div className="metrics">
+              <p>COIN................ {result.coin}</p>
+              <p>TIMEFRAME........... {result.timeframe}</p>
+              <p>TEST PERIOD......... {result.backtest.backtest_period}</p>
+              <p>CANDLES TESTED...... {result.backtest.candles_tested}</p>
+              <p>TX COST / TRADE..... {result.backtest.transaction_cost_per_trade}</p>
+              <p>SLIPPAGE............ {result.backtest.slippage_per_trade}</p>
+              <p>TOTAL COST.......... {result.backtest.total_cost_per_trade}</p>
+              <p>RISK MODEL.......... {result.risk}</p>
+              <p>TRADES.............. {result.backtest.trades}</p>
+              <p>WINS................ {result.backtest.wins}</p>
+              <p>LOSSES.............. {result.backtest.losses}</p>
+              <p>WIN RATE............ {result.backtest.win_rate}</p>
+              <p>INITIAL CAPITAL..... {result.backtest.initial_capital}</p>
+              <p>FINAL EQUITY........ {result.backtest.final_equity}</p>
+              <p>NET RETURN.......... {result.backtest.net_return}</p>
+              <p>BUY & HOLD RETURN... {result.backtest.buy_hold_return}</p>
+              <p>VS BUY & HOLD....... {result.backtest.strategy_vs_buy_hold}</p>
+              <p>AVG PNL............. {result.backtest.avg_pnl}</p>
+              <p>LARGEST PROFIT...... {result.backtest.largest_profit}</p>
+              <p>LARGEST LOSS........ {result.backtest.largest_loss}</p>
+              <p>AVG BARS IN TRADE... {result.backtest.avg_bars_in_trade}</p>
+              <p>AVG DD DURATION..... {result.backtest.avg_drawdown_duration}</p>
+              <p>DD / INIT CAPITAL... {result.backtest.max_drawdown_initial_capital}</p>
+              <p>PROFIT FACTOR....... {result.backtest.profit_factor}</p>
+              <p>MAX DRAWDOWN........ {result.backtest.max_drawdown}</p>
+              <p>RECOVERY FACTOR..... {result.backtest.recovery_factor}</p>
+              <p>RISK-ADJUSTED SCORE. {result.backtest.risk_adjusted_score}</p>
+            </div>
+          </details>
+
+          <details>
+
+            <summary>RECENT TRADES</summary>
+
+  <h2>RECENT TRADES</h2>
+
+            <div className="trade-table">
+              <div className="trade-row trade-header">
+                <span>ENTRY TIME</span>
+                <span>EXIT TIME</span>
+                <span>ENTRY</span>
+                <span>EXIT</span>
+                <span>RESULT</span>
+                <span>PNL</span>
+                <span>DURATION</span>
+              </div>
+
+              {result.backtest.recent_trades &&
+                result.backtest.recent_trades.map((trade, index) => (
+                  <div className="trade-row" key={index}>
+                    <span>{trade.entry_time}</span>
+                    <span>{trade.exit_time}</span>
+                    <span>{trade.entry_price}</span>
+                    <span>{trade.exit_price}</span>
+                    <span className={trade.result === "win" ? "trade-win" : "trade-loss"}>
+                      {trade.result.toUpperCase()}
+                    </span>
+                    <span>{trade.pnl_pct}%</span>
+                    <span>{trade.duration}</span>
+                  </div>
+                ))}
+            </div>
+          </details>
+
+          <details>
+            <summary>MARKET CONDITIONS</summary>
+
+    <h2>MARKET CONDITIONS</h2>
+
+            <div className="metrics">
+              <p>FIRST HALF MARKET.... {result.backtest.first_half_return}</p>
+              <p>SECOND HALF MARKET... {result.backtest.second_half_return}</p>
+              <p>MARKET TREND GATE.... {result.backtest.consistency_gate}</p>
+            </div>
           </details>
 
           <details>
             <summary>SYSTEM HEALTH</summary>
+
+            <h2>SYSTEM HEALTH</h2>
 
             <div className="reason">
               CMC DATA..............ACTIVE
@@ -1036,7 +1061,10 @@ Best eligible risk-adjusted score among all tested combinations.
           </details>
 
           <details>
+
             <summary>PERFORMANCE METRICS EXPLAINED</summary>
+
+<h2>PERFORMANCE METRICS EXPLAINED</h2>
 
             <div className="metrics">
               <p><strong>PF / PROFIT FACTOR</strong></p>
@@ -1070,6 +1098,7 @@ Best eligible risk-adjusted score among all tested combinations.
               <p>Account value over time, starting from the selected initial capital and updating after each closed trade.</p>
             </div>
           </details>
+
         </div>
       )}
       <div className="footer">
