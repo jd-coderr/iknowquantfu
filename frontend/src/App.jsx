@@ -391,7 +391,7 @@ Best eligible risk-adjusted score among all tested combinations.
           timeframe,
           risk,
           live_execution: liveExecution,
-        }),
+          selected_strategy: result?.selected_strategy || null,
       });
 
       const data = await response.json();
