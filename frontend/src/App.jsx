@@ -720,65 +720,24 @@ Best eligible risk-adjusted score among all tested combinations.
           <h2>AGENT DECISION ENGINE</h2>
 
           <div className="metrics">
-            <p>DATA SOURCE......... CoinMarketCap</p>
+            <p>DATA SOURCE......... CoinMarketCap Agent Hub</p>
             <p>EXECUTION LAYER..... Trust Wallet Agent Kit</p>
             <p>VENUE............... BNB Chain / BSC</p>
-            <p>MODE................ {liveExecution ? "LIVE EXECUTION" : "SAFE / QUOTE ONLY"}</p>
+
+            <br />
+
             <p>MARKET REGIME....... {getMarketRegime()}</p>
             <p>SELECTED STRATEGY... {result.selected_strategy}</p>
             <p>RISK PROFILE........ {String(result.risk).toUpperCase()}</p>
             <p>LAST DECISION....... {getAgentDecision()}</p>
             <p>TRADE PLAN.......... {agentResult?.trade_plan ? "GENERATED" : "NONE"}</p>
             <p>ACTION TAKEN........ {agentResult?.execution_result ? "EXECUTION ATTEMPTED" : "NONE"}</p>
-          </div>
 
-          <h2>HACKATHON TRACK FIT</h2>
+            <br />
 
-          <div className="metrics">
-            <p>TRACK............... TRACK 1 / AUTONOMOUS TRADING AGENTS</p>
-            <p>GOAL................ READ SIGNALS, DECIDE, RISK-CHECK, EXECUTE ON BSC</p>
-            <p>SPONSOR STACK....... CMC + TRUST WALLET AGENT KIT + BNB CHAIN</p>
-            <p>AGENT FLOW.......... CMC SIGNAL → STRATEGY MODEL → RISK GOVERNOR → TWAK → BSC</p>
-            <p>SCORING FOCUS....... RETURNS + DRAWDOWN + RISK-ADJUSTED PERFORMANCE + RULE ADHERENCE</p>
-          </div>
-
-          <h2>COINMARKETCAP SIGNAL LAYER</h2>
-
-          <div className="metrics">
-            <p>CAPABILITY.......... CMC DATA API / AGENT HUB SIGNALS</p>
-            <p>LIVE ASSET.......... {result.coin}</p>
-            <p>PRICE FEED.......... {formatPrice(result.cmc_signal?.price_usd)}</p>
-            <p>MARKET BIAS......... {String(result.cmc_signal?.market_bias || "UNKNOWN").toUpperCase()}</p>
-            <p>SENTIMENT........... {result.cmc_signal?.fear_greed?.value ?? "N/A"} / 100 {String(result.cmc_signal?.fear_greed?.label || "UNKNOWN").toUpperCase()}</p>
-            <p>ALTCOIN ROTATION.... {result.cmc_signal?.altcoin_season?.value ?? "N/A"} / 100 {String(result.cmc_signal?.altcoin_season?.label || "UNKNOWN").toUpperCase()}</p>
-            <p>SKILL MATCH......... {getCmcTopSkill()}</p>
-            <p>QUERY............... {cmcSkillHub?.query || `${result.coin} strategy`}</p>
-            <p>ROLE................ MARKET REGIME + SIGNAL CONFIRMATION</p>
-          </div>
-
-          <h2>TRUST WALLET EXECUTION LAYER</h2>
-
-          <div className="metrics">
-            <p>CAPABILITY.......... TRUST WALLET AGENT KIT / TWAK</p>
-            <p>TWAK STATUS......... {String(twakStatus).toUpperCase()}</p>
-            <p>AGENT ADDRESS....... {twakAgentAddress || "N/A"}</p>
-            <p>REGISTRATION........ {String(twakRegistration).toUpperCase()}</p>
-            <p>EXECUTION MODE...... {liveExecution ? "LIVE EXECUTION" : "SAFE / QUOTE-ONLY"}</p>
-            <p>TRADE PLAN.......... {agentResult?.trade_plan ? "GENERATED" : "WAITING FOR SIGNAL"}</p>
-            <p>LAST ACTION......... {agentResult?.execution_result ? "EXECUTION ATTEMPTED" : "NO EXECUTION"}</p>
-            <p>RULE ADHERENCE...... MAX SIZE + USER RISK LIMITS + SAFE MODE</p>
-          </div>
-
-          <h2>BNB CHAIN VENUE LAYER</h2>
-
-          <div className="metrics">
-            <p>CAPABILITY.......... BNB CHAIN EXECUTION VENUE</p>
-            <p>CHAIN............... BSC</p>
-            <p>WALLET NETWORK...... {walletChainId === "0x38" ? "BNB SMART CHAIN" : walletChainId ? `WRONG NETWORK (${walletChainId})` : "UNKNOWN"}</p>
-            <p>NATIVE TOKEN........ BNB</p>
-            <p>WALLET BALANCE...... {bnbBalance !== null ? `${bnbBalance} BNB` : "N/A"}</p>
-            <p>DEX ROUTE........... PANCAKESWAP / BSC LIQUIDITY READY</p>
-            <p>VENUE ROLE.......... LOW-FEE ON-CHAIN TRADE SETTLEMENT</p>
+            <p>AGENT FLOW.......... CMC → STRATEGY MODEL → RISK GOVERNOR → TWAK → BSC</p>
+            <p>RULE ADHERENCE...... USER RISK LIMITS ENFORCED</p>
+            <p>EXECUTION MODE...... {liveExecution ? "LIVE" : "SAFE / QUOTE ONLY"}</p>
           </div>
 
           {result.backtest.equity_curve && result.backtest.equity_curve.length > 1 && (
@@ -1032,7 +991,7 @@ Best eligible risk-adjusted score among all tested combinations.
       )}
 
       <div className="footer">
-        CMC: OK &nbsp;&nbsp; DATA: OK &nbsp;&nbsp; BACKTEST: OK &nbsp;&nbsp; OPTIMIZER: OK &nbsp;&nbsp; AGENT STACK: CMC + TWAK + BNB
+        CMC AGENT HUB: OK &nbsp;&nbsp; TWAK: OK &nbsp;&nbsp; BNB CHAIN: OK &nbsp;&nbsp; BACKTEST ENGINE: OK &nbsp;&nbsp; OPTIMIZER: OK
       </div>
     </div>
   );
