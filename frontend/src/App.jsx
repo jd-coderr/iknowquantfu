@@ -522,7 +522,7 @@ Best eligible risk-adjusted score among all tested combinations.
           </button>
 
                  {portfolio && (
-            <div className="panel">
+            <div className="panel portfolio-panel">
               <div className="panel-title">PORTFOLIO</div>
 
               <div className="metrics">

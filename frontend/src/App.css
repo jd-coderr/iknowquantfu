@@ -622,3 +622,7 @@ details[open] summary::before {
     0 0 4px #00ff41,
     0 0 8px #00ff41;
 }
+
+.portfolio-panel {
+  margin-top: 36px;
+}
