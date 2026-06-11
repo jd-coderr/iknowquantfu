@@ -723,6 +723,7 @@ Best eligible risk-adjusted score among all tested combinations.
             <br />
 
             <p>MARKET REGIME....... {getMarketRegime()}</p>
+            <p>STRATEGY MODE....... AUTO-SELECT BEST BACKTESTED STRATEGY</p>
             <p>SELECTED STRATEGY... {result.selected_strategy}</p>
             <p>RISK PROFILE........ {String(result.risk).toUpperCase()}</p>
             <p>LAST DECISION....... {getAgentDecision()}</p>
