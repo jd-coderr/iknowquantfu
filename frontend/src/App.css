@@ -561,15 +561,6 @@ details summary::-webkit-details-marker {
 }
 
 details summary::before {
-  content: "▶";
-  font-size: 0.9rem;
-  margin-right: 6px;
-}
-
-details[open] summary::before {
-
-details h2,
-details summary {
   color: #ffffff;
   font-weight: bold;
   letter-spacing: 6px;
@@ -588,44 +579,44 @@ details[open] summary::before {
     0 0 8px #00ff41;
 }
 
-.terminal-checkbox {
+.terminal-toggle {
   width: fit-content;
-  margin: 24px auto 18px;
+  min-width: 340px;
+  margin: 28px auto 22px;
   padding: 14px 28px;
   border: 2px solid #00ff41;
+  background: rgba(0, 255, 65, 0.025);
+  color: #00ff41;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  color: #00ff41;
+  gap: 16px;
   font-family: "Courier New", monospace;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: bold;
-  cursor: pointer;
   text-shadow: 0 0 6px #00ff41;
-  background: rgba(0, 255, 65, 0.025);
 }
 
-.terminal-checkbox input {
-  display: none;
+.terminal-toggle:hover {
+  background: rgba(0, 255, 65, 0.12);
 }
 
-.terminal-checkbox-box {
-  width: 24px;
-  height: 24px;
+.terminal-toggle-box {
+  width: 26px;
+  height: 26px;
   border: 2px solid #00ff41;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  font-size: 20px;
+  color: #00ff41;
+  font-size: 22px;
   line-height: 1;
+}
+
+.terminal-toggle.active .terminal-toggle-box {
+  color: #ffffff;
   text-shadow:
     0 0 2px #ffffff,
     0 0 4px #00ff41,
     0 0 8px #00ff41;
-}
-
-.terminal-checkbox:hover {
-  background: rgba(0, 255, 65, 0.12);
 }
