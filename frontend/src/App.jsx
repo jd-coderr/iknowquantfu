@@ -514,12 +514,12 @@ Best eligible risk-adjusted score among all tested combinations.
     <div className="panel-title">PORTFOLIO</div>
 
     <div className="metrics">
-  <p>STATUS.............. {portfolio.success ? "CONNECTED" : "ERROR"}</p>
-  <p>SOURCE.............. {portfolio.source}</p>
-  <p>ADDRESS............. {portfolio.walletAddress}</p>
-  <p>CHAIN............... {portfolio.chain}</p>
-  <p>BNB BALANCE......... {portfolio.assets?.[0]?.balance} BNB</p>
-
+      <p>STATUS.............. {portfolio.success ? "CONNECTED" : "ERROR"}</p>
+      <p>SOURCE.............. {portfolio.source}</p>
+      <p>ADDRESS............. {portfolio.walletAddress}</p>
+      <p>CHAIN............... {portfolio.chain}</p>
+      <p>BNB BALANCE......... {portfolio.assets?.[0]?.balance} BNB</p>
+    </div>
   </div>
 )}
             <label>ASSET</label>
