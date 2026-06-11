@@ -481,13 +481,16 @@ Best eligible risk-adjusted score among all tested combinations.
   {"> LOAD TRADE LOG <"}
 </button>
 
-<label className="copy-btn">
+<label className="terminal-checkbox">
   <input
     type="checkbox"
     checked={liveExecution}
     onChange={(e) => setLiveExecution(e.target.checked)}
   />
-  LIVE EXECUTION
+  <span className="terminal-checkbox-box">
+    {liveExecution ? "✕" : ""}
+  </span>
+  <span>LIVE EXECUTION</span>
 </label>
 
 <button onClick={runAgentCycle} disabled={loading} className="copy-btn">

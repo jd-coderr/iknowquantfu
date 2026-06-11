@@ -587,3 +587,45 @@ details[open] summary::before {
     0 0 4px #00ff41,
     0 0 8px #00ff41;
 }
+
+.terminal-checkbox {
+  width: fit-content;
+  margin: 24px auto 18px;
+  padding: 14px 28px;
+  border: 2px solid #00ff41;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #00ff41;
+  font-family: "Courier New", monospace;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  text-shadow: 0 0 6px #00ff41;
+  background: rgba(0, 255, 65, 0.025);
+}
+
+.terminal-checkbox input {
+  display: none;
+}
+
+.terminal-checkbox-box {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #00ff41;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 20px;
+  line-height: 1;
+  text-shadow:
+    0 0 2px #ffffff,
+    0 0 4px #00ff41,
+    0 0 8px #00ff41;
+}
+
+.terminal-checkbox:hover {
+  background: rgba(0, 255, 65, 0.12);
+}
