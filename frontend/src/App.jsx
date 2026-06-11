@@ -511,8 +511,21 @@ Best eligible risk-adjusted score among all tested combinations.
             {walletAddress ? "WALLET CONNECTED" : "> CONNECT WALLET <"}
           </button>
 
-       
-          {portfolio && (
+          {walletAddress && walletChainId !== "0x38" && (
+            <button onClick={switchToBnbChain} disabled={loading} className="copy-btn">
+              {"> SWITCH TO BNB SMART CHAIN <"}
+            </button>
+          )}
+
+          <button onClick={checkRegistration} disabled={loading} className="copy-btn">
+            {"> CHECK REGISTRATION <"}
+          </button>
+
+          <button onClick={loadPortfolio} disabled={loading} className="copy-btn">
+            {"> LOAD PORTFOLIO <"}
+          </button>
+
+                 {portfolio && (
             <div className="panel">
               <div className="panel-title">PORTFOLIO</div>
 
@@ -889,6 +902,8 @@ Best eligible risk-adjusted score among all tested combinations.
               <p>BUY & HOLD RETURN... {result.backtest.buy_hold_return}</p>
               <p>VS BUY & HOLD....... {result.backtest.strategy_vs_buy_hold}</p>
               <p>RISK-ADJUSTED SCORE. {result.backtest.risk_adjusted_score}</p>
+              <p>EARLY PERIOD RETURN... {result.backtest.first_half_return}</p>
+              <p>LATE PERIOD RETURN.. {result.backtest.second_half_return}</p>
             </div>
           </details>
 
@@ -923,22 +938,7 @@ Best eligible risk-adjusted score among all tested combinations.
             </div>
           </details>
 
-          <details>
-            <summary>SYSTEM STATUS</summary>
-
-            <div className="metrics">
-              <p>MIN TRADE GATE...... {result.backtest.min_trade_gate}</p>
-              <p>DRAWDOWN GATE....... {result.backtest.drawdown_gate}</p>
-              <p>CONSISTENCY GATE.... {result.backtest.consistency_gate}</p>
-              <p>FIRST HALF MARKET... {result.backtest.first_half_return}</p>
-              <p>SECOND HALF MARKET.. {result.backtest.second_half_return}</p>
-              <p>MINIMUM TRADES...... {result.backtest.min_trade_gate === "PASS" ? "PASS" : "FAIL"}</p>
-              <p>DRAWDOWN LIMIT...... {result.backtest.drawdown_gate === "PASS" ? "PASS" : "FAIL"}</p>
-              <p>PROFIT FACTOR....... {Number(result.backtest.profit_factor) > 1 ? "PASS" : "FAIL"}</p>
-              <p>EXPECTANCY.......... {parsePercent(result.backtest.expectancy) > 0 ? "PASS" : "FAIL"}</p>
-            </div>
-          </details>
-
+       
           <details>
             <summary>PERFORMANCE METRICS EXPLAINED</summary>
 
