@@ -14,8 +14,11 @@ def get_live_twak_agent_address():
             timeout=30,
         )
 
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
+        output = result.stdout.strip()
+
+        if result.returncode == 0 and "0x" in output:
+            start = output.find("0x")
+            return output[start:start + 42]
 
     except Exception:
         pass
