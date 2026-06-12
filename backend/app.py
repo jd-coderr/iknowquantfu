@@ -427,10 +427,10 @@ def agent_cycle(request: AgentCycleRequest):
             "amount": "1",
             "from_token": "USDT",
             "to_token": "BNB",
-            "quote_only": True,
+            "quote_only": not request.live_execution,
             "reason": (
                 "Bullish CMC bias and positive strategy score. "
-                "USDT → BNB remains quote-only until ERC-20 approval issue is resolved."
+                f"USDT → BNB live execution allowed: {request.live_execution}."
             ),
         }
 
