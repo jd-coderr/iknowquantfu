@@ -30,7 +30,6 @@ def ensure_twak_wallet():
         "wallet",
         "keychain",
         "save",
-        "--private-key",
         private_key,
         "--password",
         password,
