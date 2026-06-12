@@ -599,7 +599,7 @@ async function runAgentCycle() {
 
                  {portfolio && (
             <div className="panel portfolio-panel">
-              <div className="panel-title">PORTFOLIO</div>
+              <div className="panel-title">AGENT PORTFOLIO</div>
 
               <div className="metrics">
                 {portfolio.assets?.map((asset, index) => (
@@ -632,10 +632,11 @@ async function runAgentCycle() {
             <span>LIVE EXECUTION</span>
           </button>
 
-          <button onClick={runAgentCycle} disabled={loading} className="copy-btn">
-            {"> RUN AGENT <"}
-          </button>
-<div className="metrics">
+          <button onClick={runAgentCycle} disabled={loading} className="copy-btn run-agent-btn">
+  {"> RUN AGENT <"}
+</button>
+
+<div className="metrics autonomous-status-box">
   <p>AUTONOMOUS MODE..... {autonomousMode ? "RUNNING" : "STOPPED"}</p>
   <p>CHECK INTERVAL...... {autonomousInterval} MINUTES</p>
   <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
@@ -643,7 +644,7 @@ async function runAgentCycle() {
   <p>NEXT CHECK.......... {autonomousStatus?.next_run || "N/A"}</p>
 </div>
 
-<label>AUTONOMOUS INTERVAL</label>
+<label className="autonomous-interval-label">AUTONOMOUS INTERVAL</label>
 <select
   value={autonomousInterval}
   disabled={autonomousMode}
@@ -658,7 +659,7 @@ async function runAgentCycle() {
 <button
   onClick={autonomousMode ? stopAutonomousMode : startAutonomousMode}
   disabled={loading}
-  className="copy-btn"
+  className="copy-btn autonomous-start-btn"
 >
   {autonomousMode ? "> STOP AUTONOMOUS MODE <" : "> START AUTONOMOUS MODE <"}
 </button>

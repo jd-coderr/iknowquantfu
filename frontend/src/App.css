@@ -626,3 +626,23 @@ details[open] summary::before {
 .portfolio-panel {
   margin-top: 36px;
 }
+
+.run-agent-btn {
+  margin-bottom: 32px;
+}
+
+.autonomous-status-box {
+  margin-top: 0;
+  margin-bottom: 32px;
+}
+
+.autonomous-interval-label {
+  display: block;
+  margin-top: 32px;
+  margin-bottom: 18px;
+}
+
+.autonomous-start-btn {
+  margin-top: 32px;
+  margin-bottom: 32px;
+}
