@@ -561,23 +561,61 @@ async function runAgentCycle() {
           <p>AGENT ADDRESS....... {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
           <p>CHAIN............... BSC</p>
           <p>EXECUTION........... {liveExecution ? "LIVE ENABLED" : "DISABLED"}</p>
-          <p>
-            ON-CHAIN STATUS.....{" "}
-            {twakRegistration === "ready_for_onchain_registration"
-              ? "READY FOR REGISTRATION"
-              : twakRegistration === "not_ready"
-              ? "NOT READY"
-              : String(twakRegistration || "UNKNOWN").toUpperCase()}
+          <p>AGENT STATUS.......{" "}
+    {twakRegistration === "ready_for_onchain_registration"
+    ? "LIVE TRADING READY"
+    : twakRegistration === "not_ready"
+    ? "NOT READY"
+    : String(twakRegistration || "UNKNOWN").toUpperCase()}
 </p>
-          <button onClick={connectWallet} disabled={loading} className="copy-btn">
-            {walletAddress ? "WALLET CONNECTED" : "> CONNECT WALLET <"}
-          </button>
+          <div className="agent-control-panel">
+            <div className="panel-title">AGENT CONTROLS</div>
 
-          <button onClick={loadPortfolio} disabled={loading} className="copy-btn">
-            {"> LOAD AGENT PORTFOLIO <"}
-          </button>
+            <div className="agent-control-section">
+              <p className="control-section-title">1. WALLET CONNECTION</p>
 
-                 {portfolio && (
+              <button onClick={connectWallet} disabled={loading} className="copy-btn">
+                {walletAddress ? "WALLET CONNECTED" : "> CONNECT WALLET <"}
+              </button>
+            </div>
+
+            <div className="agent-control-section">
+              <p className="control-section-title">2. EXECUTION MODE</p>
+
+              <button
+                type="button"
+                className={`terminal-toggle ${liveExecution ? "active" : ""}`}
+                onClick={() => setLiveExecution(!liveExecution)}
+              >
+                <span className="terminal-toggle-box">
+                  {liveExecution ? "X" : ""}
+                </span>
+                <span>{liveExecution ? "LIVE EXECUTION ON" : "SAFE MODE / QUOTE ONLY"}</span>
+              </button>
+            </div>
+
+            <div className="agent-control-section">
+              <p className="control-section-title">3. AGENT PORTFOLIO</p>
+
+              <button onClick={loadPortfolio} disabled={loading} className="copy-btn">
+                {"> LOAD AGENT PORTFOLIO <"}
+              </button>
+            </div>
+
+            <div className="agent-control-section">
+              <p className="control-section-title">4. MANUAL AGENT RUN</p>
+
+              <button
+                onClick={runAgentCycle}
+                disabled={loading}
+                className="copy-btn run-agent-btn"
+              >
+                {"> RUN AGENT <"}
+              </button>
+            </div>
+          </div>
+
+          {portfolio && (
             <div className="panel portfolio-panel">
               <div className="panel-title">AGENT PORTFOLIO</div>
 
@@ -601,54 +639,40 @@ async function runAgentCycle() {
             </div>
           )}
 
-          <button
-            type="button"
-            className={`terminal-toggle ${liveExecution ? "active" : ""}`}
-            onClick={() => setLiveExecution(!liveExecution)}
-          >
-            <span className="terminal-toggle-box">
-              {liveExecution ? "X" : ""}
-            </span>
-            <span>LIVE EXECUTION</span>
-          </button>
+          <div className="autonomous-container">
+            <div className="metrics autonomous-status-box">
+              <p>AUTONOMOUS MODE..... {autonomousMode ? "RUNNING" : "STOPPED"}</p>
+              <p>CHECK INTERVAL...... {autonomousInterval} MINUTES</p>
+              <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
+              <p>LAST REASON......... {autonomousStatus?.last_reason || "N/A"}</p>
+              <p>NEXT CHECK.......... {autonomousStatus?.next_run || "N/A"}</p>
+            </div>
 
-          <button
-  onClick={runAgentCycle}
-  disabled={loading}
-  className="copy-btn run-agent-btn">
-  {"> RUN AGENT <"}
-</button>
+            <div className="agent-control-section">
+              <p className="control-section-title">5. AUTONOMOUS MODE</p>
 
-<div className="autonomous-container">
-  <div className="metrics autonomous-status-box">
-    <p>AUTONOMOUS MODE..... {autonomousMode ? "RUNNING" : "STOPPED"}</p>
-    <p>CHECK INTERVAL...... {autonomousInterval} MINUTES</p>
-    <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
-    <p>LAST REASON......... {autonomousStatus?.last_reason || "N/A"}</p>
-    <p>NEXT CHECK.......... {autonomousStatus?.next_run || "N/A"}</p>
-  </div>
+              <label className="autonomous-label">AUTONOMOUS INTERVAL</label>
 
-  <label className="autonomous-label">AUTONOMOUS INTERVAL</label>
+              <select
+                value={autonomousInterval}
+                disabled={autonomousMode}
+                onChange={(e) => setAutonomousInterval(Number(e.target.value))}
+              >
+                <option value={1}>1 MINUTE</option>
+                <option value={5}>5 MINUTES</option>
+                <option value={15}>15 MINUTES</option>
+                <option value={30}>30 MINUTES</option>
+              </select>
 
-  <select
-    value={autonomousInterval}
-    disabled={autonomousMode}
-    onChange={(e) => setAutonomousInterval(Number(e.target.value))}
-  >
-    <option value={1}>1 MINUTE</option>
-    <option value={5}>5 MINUTES</option>
-    <option value={15}>15 MINUTES</option>
-    <option value={30}>30 MINUTES</option>
-  </select>
-
-  <button
-    onClick={autonomousMode ? stopAutonomousMode : startAutonomousMode}
-    disabled={loading}
-    className="copy-btn autonomous-start-btn"
-  >
-    {autonomousMode ? "> STOP AUTONOMOUS MODE <" : "> START AUTONOMOUS MODE <"}
-  </button>
-</div>
+              <button
+                onClick={autonomousMode ? stopAutonomousMode : startAutonomousMode}
+                disabled={loading}
+                className="copy-btn autonomous-start-btn"
+              >
+                {autonomousMode ? "> STOP AUTONOMOUS MODE <" : "> START AUTONOMOUS MODE <"}
+              </button>
+            </div>
+          </div></div>
         </div>
 
         <div className="input-row">
