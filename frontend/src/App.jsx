@@ -543,137 +543,7 @@ async function runAgentCycle() {
           <p>TDI WHITE SIGNAL REVERSAL</p>
         </div>
 
-        <h2 className="strategy-library-title">AGENT STATUS</h2>
-
-        <div className="metrics strategy-library-box">
-          <p>USER WALLET......... {walletAddress ? "CONNECTED" : "NOT CONNECTED"}</p>
-          <p>USER ADDRESS........ {walletAddress || "N/A"}</p>
-          <p>
-            NETWORK.............{" "}
-            {walletChainId === "0x38"
-              ? "BNB SMART CHAIN"
-              : walletChainId
-              ? `WRONG NETWORK (${walletChainId})`
-              : "UNKNOWN"}
-          </p>
-          <p>USER BNB BALANCE.... {bnbBalance !== null ? `${bnbBalance} BNB` : "N/A"}</p>
-          <p>TWAK................ {String(twakStatus).toUpperCase()}</p>
-          <p>AGENT ADDRESS....... {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
-          <p>CHAIN............... BSC</p>
-          <p>EXECUTION........... {liveExecution ? "LIVE ENABLED" : "DISABLED"}</p>
-          <p>AGENT STATUS.......{" "}
-    {twakRegistration === "ready_for_onchain_registration"
-    ? "LIVE TRADING READY"
-    : twakRegistration === "not_ready"
-    ? "NOT READY"
-    : String(twakRegistration || "UNKNOWN").toUpperCase()}
-</p>
-          <div className="agent-control-panel">
-            <div className="panel-title">AGENT CONTROLS</div>
-
-            <div className="agent-control-section">
-              <p className="control-section-title">1. WALLET CONNECTION</p>
-
-              <button onClick={connectWallet} disabled={loading} className="copy-btn">
-                {walletAddress ? "WALLET CONNECTED" : "> CONNECT WALLET <"}
-              </button>
-            </div>
-
-            <div className="agent-control-section">
-              <p className="control-section-title">2. EXECUTION MODE</p>
-
-              <button
-                type="button"
-                className={`terminal-toggle ${liveExecution ? "active" : ""}`}
-                onClick={() => setLiveExecution(!liveExecution)}
-              >
-                <span className="terminal-toggle-box">
-                  {liveExecution ? "X" : ""}
-                </span>
-                <span>{liveExecution ? "LIVE EXECUTION ON" : "SAFE MODE / QUOTE ONLY"}</span>
-              </button>
-            </div>
-
-            <div className="agent-control-section">
-              <p className="control-section-title">3. AGENT PORTFOLIO</p>
-
-              <button onClick={loadPortfolio} disabled={loading} className="copy-btn">
-                {"> LOAD AGENT PORTFOLIO <"}
-              </button>
-            </div>
-
-            <div className="agent-control-section">
-              <p className="control-section-title">4. MANUAL AGENT RUN</p>
-
-              <button
-                onClick={runAgentCycle}
-                disabled={loading}
-                className="copy-btn run-agent-btn"
-              >
-                {"> RUN AGENT <"}
-              </button>
-            </div>
-          </div>
-
-          {portfolio && (
-            <div className="panel portfolio-panel">
-              <div className="panel-title">AGENT PORTFOLIO</div>
-
-              <div className="metrics autonomous-section">
-                {portfolio.assets?.map((asset, index) => (
-                  <p key={index}>
-                    {asset.symbol}................... {asset.balance ?? "N/A"} ({formatMoney(asset.usdValue)})
-                  </p>
-                ))}
-
-                <br />
-
-                <p>TOTAL VALUE........... {formatMoney(portfolio.totalUsdValue)}</p>
-
-                <p>
-                  TRADING P/L...........{" "}
-                  {Number(portfolio.tradingPnlUsd || 0) >= 0 ? "+" : "-"}$
-                  {Math.abs(Number(portfolio.tradingPnlUsd || 0)).toFixed(2)}
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="autonomous-container">
-            <div className="metrics autonomous-status-box">
-              <p>AUTONOMOUS MODE..... {autonomousMode ? "RUNNING" : "STOPPED"}</p>
-              <p>CHECK INTERVAL...... {autonomousInterval} MINUTES</p>
-              <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
-              <p>LAST REASON......... {autonomousStatus?.last_reason || "N/A"}</p>
-              <p>NEXT CHECK.......... {autonomousStatus?.next_run || "N/A"}</p>
-            </div>
-
-            <div className="agent-control-section">
-              <p className="control-section-title">5. AUTONOMOUS MODE</p>
-
-              <label className="autonomous-label">AUTONOMOUS INTERVAL</label>
-
-              <select
-                value={autonomousInterval}
-                disabled={autonomousMode}
-                onChange={(e) => setAutonomousInterval(Number(e.target.value))}
-              >
-                <option value={1}>1 MINUTE</option>
-                <option value={5}>5 MINUTES</option>
-                <option value={15}>15 MINUTES</option>
-                <option value={30}>30 MINUTES</option>
-              </select>
-
-              <button
-                onClick={autonomousMode ? stopAutonomousMode : startAutonomousMode}
-                disabled={loading}
-                className="copy-btn autonomous-start-btn"
-              >
-                {autonomousMode ? "> STOP AUTONOMOUS MODE <" : "> START AUTONOMOUS MODE <"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <h2 className="strategy-library-title">TRADE SETUP</h2>
 
         <div className="input-row">
           <div>
@@ -735,16 +605,126 @@ async function runAgentCycle() {
               />
             </div>
           </div>
+        </div>
 
-          <button onClick={generateStrategy} disabled={loading}>
+        <h2 className="strategy-library-title">ACTION CENTER</h2>
+
+        <div className="agent-control-panel">
+          <button onClick={generateStrategy} disabled={loading} className="copy-btn">
             {loading && loadingMode === "generate" ? "GENERATING..." : "> GENERATE STRATEGY <"}
           </button>
 
-          <div className="or-divider">OR</div>
-
-          <button onClick={optimizeStrategy} disabled={loading}>
+          <button onClick={optimizeStrategy} disabled={loading} className="copy-btn">
             {loading && loadingMode === "optimize" ? "OPTIMIZING..." : "> AUTO-OPTIMIZE SETUP <"}
           </button>
+
+          <button onClick={connectWallet} disabled={loading} className="copy-btn">
+            {walletAddress ? "WALLET CONNECTED" : "> CONNECT WALLET <"}
+          </button>
+
+          <button
+            type="button"
+            className={`terminal-toggle ${liveExecution ? "active" : ""}`}
+            onClick={() => setLiveExecution(!liveExecution)}
+          >
+            <span className="terminal-toggle-box">
+              {liveExecution ? "X" : ""}
+            </span>
+            <span>{liveExecution ? "LIVE EXECUTION ON" : "SAFE MODE / QUOTE ONLY"}</span>
+          </button>
+
+          <button onClick={loadPortfolio} disabled={loading} className="copy-btn">
+            {"> LOAD AGENT PORTFOLIO <"}
+          </button>
+
+          <button
+            onClick={runAgentCycle}
+            disabled={loading}
+            className="copy-btn run-agent-btn"
+          >
+            {"> RUN AGENT <"}
+          </button>
+
+          <select
+            value={autonomousInterval}
+            disabled={autonomousMode}
+            onChange={(e) => setAutonomousInterval(Number(e.target.value))}
+          >
+            <option value={1}>1 MINUTE</option>
+            <option value={5}>5 MINUTES</option>
+            <option value={15}>15 MINUTES</option>
+            <option value={30}>30 MINUTES</option>
+          </select>
+
+          <button
+            onClick={autonomousMode ? stopAutonomousMode : startAutonomousMode}
+            disabled={loading}
+            className="copy-btn autonomous-start-btn"
+          >
+            {autonomousMode ? "> STOP AUTONOMOUS MODE <" : "> START AUTONOMOUS MODE <"}
+          </button>
+        </div>
+
+        <h2 className="strategy-library-title">AGENT STATUS</h2>
+
+        <div className="metrics strategy-library-box">
+          <p>USER WALLET......... {walletAddress ? "CONNECTED" : "NOT CONNECTED"}</p>
+          <p>USER ADDRESS........ {walletAddress || "N/A"}</p>
+          <p>
+            NETWORK.............{" "}
+            {walletChainId === "0x38"
+              ? "BNB SMART CHAIN"
+              : walletChainId
+              ? `WRONG NETWORK (${walletChainId})`
+              : "UNKNOWN"}
+          </p>
+          <p>USER BNB BALANCE.... {bnbBalance !== null ? `${bnbBalance} BNB` : "N/A"}</p>
+          <p>TWAK................ {String(twakStatus).toUpperCase()}</p>
+          <p>AGENT ADDRESS....... {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
+          <p>CHAIN............... BSC</p>
+          <p>EXECUTION........... {liveExecution ? "LIVE ENABLED" : "DISABLED"}</p>
+          <p>
+            AGENT STATUS........{" "}
+            {twakRegistration === "ready_for_onchain_registration"
+              ? "LIVE TRADING READY"
+              : twakRegistration === "not_ready"
+              ? "NOT READY"
+              : String(twakRegistration || "UNKNOWN").toUpperCase()}
+          </p>
+        </div>
+
+        {portfolio && (
+          <div className="panel portfolio-panel">
+            <div className="panel-title">AGENT PORTFOLIO</div>
+
+            <div className="metrics autonomous-section">
+              {portfolio.assets?.map((asset, index) => (
+                <p key={index}>
+                  {asset.symbol}................... {asset.balance ?? "N/A"} ({formatMoney(asset.usdValue)})
+                </p>
+              ))}
+
+              <br />
+
+              <p>TOTAL VALUE........... {formatMoney(portfolio.totalUsdValue)}</p>
+
+              <p>
+                TRADING P/L...........{" "}
+                {Number(portfolio.tradingPnlUsd || 0) >= 0 ? "+" : "-"}$
+                {Math.abs(Number(portfolio.tradingPnlUsd || 0)).toFixed(2)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="autonomous-container">
+          <div className="metrics autonomous-status-box">
+            <p>AUTONOMOUS MODE..... {autonomousMode ? "RUNNING" : "STOPPED"}</p>
+            <p>CHECK INTERVAL...... {autonomousInterval} MINUTES</p>
+            <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
+            <p>LAST REASON......... {autonomousStatus?.last_reason || "N/A"}</p>
+            <p>NEXT CHECK.......... {autonomousStatus?.next_run || "N/A"}</p>
+          </div>
         </div>
       </div>
 
