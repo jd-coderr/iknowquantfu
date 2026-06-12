@@ -677,6 +677,8 @@ def autonomous_start(request: AutonomousRequest):
 def autonomous_stop():
     AUTONOMOUS_STATE["running"] = False
     AUTONOMOUS_STATE["next_run"] = None
+    AUTONOMOUS_STATE["last_decision"] = None
+    AUTONOMOUS_STATE["last_result"] = None
     AUTONOMOUS_STATE["last_reason"] = "Autonomous mode stopped by user."
 
     return {
