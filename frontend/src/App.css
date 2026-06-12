@@ -650,19 +650,77 @@ details[open] summary::before {
 
 .autonomous-container select {
   display: block;
-  margin: 0 0 50px 0;
+  margin: 0 0 36px 0;
 }
 
 .autonomous-start-btn {
   display: block;
-  margin: 50px auto;
+  margin: 0 auto;
 }
 
+/* ============================
+   CLEAN ACTION CENTER LAYOUT
+   ============================ */
+
+/* Equal spacing above and below the white section headings */
+.strategy-library-title {
+  margin: 36px 0 !important;
+}
+
+/* Put all action buttons close together in a clean 2-column grid */
+.agent-control-panel {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto 48px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+/* Remove old random button/toggle margins inside Action Center */
+.agent-control-panel button,
+.agent-control-panel select,
+.agent-control-panel .terminal-toggle,
+.agent-control-panel .copy-btn,
+.agent-control-panel .run-agent-btn,
+.agent-control-panel .autonomous-start-btn {
+  width: 100%;
+  max-width: none;
+  height: 58px;
+  margin: 0 !important;
+}
+
+/* Keep the live execution toggle aligned like a normal button */
+.agent-control-panel .terminal-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Remove the unwanted border around the autonomous text block */
 .autonomous-status-box {
-  padding: 28px;
-  text-align: center;
+  border: none !important;
+  padding: 0 !important;
+  margin: 48px 0 0 !important;
 }
 
+/* Make autonomous status feel like text, not another boxed panel */
 .autonomous-status-box p {
   margin: 18px 0;
 }
+
+/* Keep the autonomous status separated by whitespace only */
+.autonomous-container {
+  margin-top: 48px !important;
+  margin-bottom: 36px;
+}
+
+/* Mobile: stack buttons cleanly */
+@media (max-width: 768px) {
+  .agent-control-panel {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
