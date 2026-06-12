@@ -601,7 +601,7 @@ async function runAgentCycle() {
             <div className="panel portfolio-panel">
               <div className="panel-title">AGENT PORTFOLIO</div>
 
-              <div className="metrics">
+              <div className="metrics autonomous-section">
                 {portfolio.assets?.map((asset, index) => (
                   <p key={index}>
                     {asset.symbol}................... {formatMoney(asset.usdValue)}
@@ -632,37 +632,43 @@ async function runAgentCycle() {
             <span>LIVE EXECUTION</span>
           </button>
 
-          <button onClick={runAgentCycle} disabled={loading} className="copy-btn run-agent-btn">
+          <button
+  onClick={runAgentCycle}
+  disabled={loading}
+  className="copy-btn run-agent-btn">
   {"> RUN AGENT <"}
 </button>
 
-<div className="metrics autonomous-status-box">
-  <p>AUTONOMOUS MODE..... {autonomousMode ? "RUNNING" : "STOPPED"}</p>
-  <p>CHECK INTERVAL...... {autonomousInterval} MINUTES</p>
-  <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
-  <p>LAST REASON......... {autonomousStatus?.last_reason || "N/A"}</p>
-  <p>NEXT CHECK.......... {autonomousStatus?.next_run || "N/A"}</p>
+<div className="autonomous-container">
+  <div className="metrics autonomous-status-box">
+    <p>AUTONOMOUS MODE..... {autonomousMode ? "RUNNING" : "STOPPED"}</p>
+    <p>CHECK INTERVAL...... {autonomousInterval} MINUTES</p>
+    <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
+    <p>LAST REASON......... {autonomousStatus?.last_reason || "N/A"}</p>
+    <p>NEXT CHECK.......... {autonomousStatus?.next_run || "N/A"}</p>
+  </div>
+
+  <label className="autonomous-label">AUTONOMOUS INTERVAL</label>
+
+  <select
+    value={autonomousInterval}
+    disabled={autonomousMode}
+    onChange={(e) => setAutonomousInterval(Number(e.target.value))}
+  >
+    <option value={1}>1 MINUTE</option>
+    <option value={5}>5 MINUTES</option>
+    <option value={15}>15 MINUTES</option>
+    <option value={30}>30 MINUTES</option>
+  </select>
+
+  <button
+    onClick={autonomousMode ? stopAutonomousMode : startAutonomousMode}
+    disabled={loading}
+    className="copy-btn autonomous-start-btn"
+  >
+    {autonomousMode ? "> STOP AUTONOMOUS MODE <" : "> START AUTONOMOUS MODE <"}
+  </button>
 </div>
-
-<label className="autonomous-interval-label">AUTONOMOUS INTERVAL</label>
-<select
-  value={autonomousInterval}
-  disabled={autonomousMode}
-  onChange={(e) => setAutonomousInterval(Number(e.target.value))}
->
-  <option value={1}>1 MINUTE</option>
-  <option value={5}>5 MINUTES</option>
-  <option value={15}>15 MINUTES</option>
-  <option value={30}>30 MINUTES</option>
-</select>
-
-<button
-  onClick={autonomousMode ? stopAutonomousMode : startAutonomousMode}
-  disabled={loading}
-  className="copy-btn autonomous-start-btn"
->
-  {autonomousMode ? "> STOP AUTONOMOUS MODE <" : "> START AUTONOMOUS MODE <"}
-</button>
         </div>
 
         <div className="input-row">
