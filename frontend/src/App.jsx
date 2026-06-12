@@ -628,7 +628,7 @@ async function runAgentCycle() {
             onClick={() => setLiveExecution(!liveExecution)}
           >
             <span className="terminal-toggle-box">
-              {liveExecution ? "X" : ""}
+              {liveExecution ? "X" : "□"}
             </span>
             <span>{liveExecution ? "LIVE EXECUTION ON" : "SAFE MODE / QUOTE ONLY"}</span>
           </button>
