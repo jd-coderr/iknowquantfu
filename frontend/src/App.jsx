@@ -591,13 +591,21 @@ async function loadTradeHistory() {
   </button>
 </div>
 
-<div style={{ textAlign: "center", marginTop: "-12px", marginBottom: "0px" }}>
+<div className="button-row">
   <button
     onClick={runAgentCycle}
     disabled={loading}
-    className="copy-btn run-agent-btn"
+    className="copy-btn"
   >
     {"> RUN AGENT <"}
+  </button>
+
+  <button
+    onClick={stopAutonomousMode}
+    disabled={loading}
+    className="copy-btn"
+  >
+    {"> STOP AGENT <"}
   </button>
 </div>
 

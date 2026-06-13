@@ -726,3 +726,10 @@ select {
   background-position: right 20px center;
   background-size: 32px;
 }
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 24px;
+}
