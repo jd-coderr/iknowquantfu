@@ -24,6 +24,7 @@ function App() {
   const [agentResult, setAgentResult] = useState(null);
   const [portfolio, setPortfolio] = useState(null);
   const [tradeHistory, setTradeHistory] = useState([]);
+  const [startingPortfolioValue, setStartingPortfolioValue] = useState(null);
   const [liveExecution, setLiveExecution] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState("");
@@ -513,25 +514,41 @@ async function runAgentCycle() {
         0
       );
 
-      setPortfolio({
-        success: data?.success === true,
-        assets,
-        totalUsdValue,
-        tradingPnlUsd: 0,
-      });
+const startingValue =
+  startingPortfolioValue === null
+    ? totalUsdValue
+    : startingPortfolioValue;
+
+if (startingPortfolioValue === null) {
+  setStartingPortfolioValue(totalUsdValue);
+}
+
+setPortfolio({
+  success: data?.success === true,
+  assets,
+  totalUsdValue,
+  startingPortfolioValue: startingValue,
+  tradingPnlUsd: totalUsdValue - startingValue,
+});
     } catch (err) {
       console.error(err);
       alert("PORTFOLIO LOAD FAILED");
     }
   }
 
-async function loadPortfolio() {
-  try {
-    ...
-  } catch (err) {
-    console.error(err);
-    alert("PORTFOLIO LOAD FAILED");
+function resetPnlBaseline() {
+  if (!portfolio) {
+    alert("LOAD PORTFOLIO FIRST");
+    return;
   }
+
+  setStartingPortfolioValue(portfolio.totalUsdValue);
+
+  setPortfolio({
+    ...portfolio,
+    startingPortfolioValue: portfolio.totalUsdValue,
+    tradingPnlUsd: 0,
+  });
 }
 
 async function loadTradeHistory() {
@@ -544,9 +561,6 @@ async function loadTradeHistory() {
     console.error(err);
   }
 }
-
-return (
-  <div className="terminal">
 
   return (
     <div className="terminal">
@@ -725,11 +739,17 @@ return (
 
               <p>TOTAL VALUE........... {formatMoney(portfolio.totalUsdValue)}</p>
 
-              <p>
-                TRADING P/L...........{" "}
-                {Number(portfolio.tradingPnlUsd || 0) >= 0 ? "+" : "-"}$
-                {Math.abs(Number(portfolio.tradingPnlUsd || 0)).toFixed(2)}
-              </p>
+              <p>START VALUE........... {formatMoney(portfolio.startingPortfolioValue)}</p>
+
+<p>
+  TRADING P/L...........{" "}
+  {Number(portfolio.tradingPnlUsd || 0) >= 0 ? "+" : "-"}$
+  {Math.abs(Number(portfolio.tradingPnlUsd || 0)).toFixed(2)}
+</p>
+
+<button onClick={resetPnlBaseline} className="copy-btn">
+  {"> RESET PNL <"}
+</button>
             </div>
           </div>
         )}
