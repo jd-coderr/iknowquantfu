@@ -827,7 +827,14 @@ const isRealTrade =
     .toUpperCase()}
 </p>
 
-<p>
+<p
+  style={{
+    color:
+      trade.from_token || trade.to_token
+        ? "#00ff41"
+        : "#808080"
+  }}
+>
   TYPE:{" "}
   {trade.from_token || trade.to_token
     ? "REAL TRADE / EXECUTION"
