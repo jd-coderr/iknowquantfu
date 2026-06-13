@@ -606,8 +606,8 @@ details[open] summary::before {
 }
 
 .run-agent-btn {
-  margin-top: 15px;
-  margin-bottom: 36px;
+  display: block;
+  margin: 0 auto !important;
 }
 
 .autonomous-container {
