@@ -644,7 +644,8 @@ details[open] summary::before {
 
 /* Equal spacing above and below the white section headings */
 .strategy-library-title {
-  margin: 36px 0 !important;
+  margin-top: 36px !important;
+  margin-bottom: 36px !important;
 }
 
 /* Put all action buttons close together in a clean 2-column grid */

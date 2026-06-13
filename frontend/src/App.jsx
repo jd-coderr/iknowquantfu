@@ -551,7 +551,7 @@ async function runAgentCycle() {
   </button>
 </div>
 
-<div style={{ textAlign: "center", marginTop: "-12px", marginBottom: "36px" }}>
+<div style={{ textAlign: "center", marginTop: "-12px", marginBottom: "0px" }}>
   <button
     onClick={runAgentCycle}
     disabled={loading}
