@@ -747,8 +747,12 @@ async function loadTradeHistory() {
   {Math.abs(Number(portfolio.tradingPnlUsd || 0)).toFixed(2)}
 </p>
 
-<button onClick={resetPnlBaseline} className="copy-btn">
-  {"> RESET PNL <"}
+<button
+  onClick={resetPnlBaseline}
+  className="copy-btn"
+  style={{ marginTop: "12px" }}
+>
+  {"> RESET PNL BASELINE <"}
 </button>
             </div>
           </div>
