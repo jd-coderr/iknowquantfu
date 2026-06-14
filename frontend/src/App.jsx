@@ -610,50 +610,42 @@ async function loadTradeHistory() {
   </button>
 </div>
 
-        {walletAddress && (
+{walletAddress ? (
   <div className="panel portfolio-panel">
-  <div className="panel-title">AGENT PORTFOLIO</div>
+    <div className="panel-title">AGENT PORTFOLIO</div>
 
-  <div className="metrics autonomous-section">
+    <div className="metrics autonomous-section">
+      {portfolio?.assets?.length > 0 ? (
+        portfolio.assets.map((asset, index) => (
+          <p key={index}>
+            {asset.symbol}................... {asset.balance ?? "N/A"} ({formatMoney(asset.usdValue)})
+          </p>
+        ))
+      ) : (
+        <p>LOADING AGENT WALLET ASSETS...</p>
+      )}
 
-    {portfolio?.assets?.length > 0 ? (
-      portfolio.assets.map((asset, index) => (
-        <p key={index}>
-          {asset.symbol}................... {asset.balance ?? "N/A"} ({formatMoney(asset.usdValue)})
-        </p>
-      ))
-    ) : (
-      <p>NO AGENT WALLET ASSETS LOADED</p>
-    )}
+      <br />
 
-    <br />
+      <p>TOTAL VALUE........... {formatMoney(portfolio?.totalUsdValue || 0)}</p>
+      <p>START VALUE........... {formatMoney(portfolio?.startingPortfolioValue || 0)}</p>
 
-    <p>
-      TOTAL VALUE...........
-      {formatMoney(portfolio?.totalUsdValue || 0)}
-    </p>
+      <p>
+        TRADING P/L...........{" "}
+        {Number(portfolio?.tradingPnlUsd || 0) >= 0 ? "+" : "-"}$
+        {Math.abs(Number(portfolio?.tradingPnlUsd || 0)).toFixed(2)}
+      </p>
 
-    <p>
-      START VALUE...........
-      {formatMoney(portfolio?.startingPortfolioValue || 0)}
-    </p>
-
-    <p>
-      TRADING P/L...........{" "}
-      {Number(portfolio?.tradingPnlUsd || 0) >= 0 ? "+" : "-"}$
-      {Math.abs(Number(portfolio?.tradingPnlUsd || 0)).toFixed(2)}
-    </p>
-
-    <button
-      onClick={resetPnlBaseline}
-      className="copy-btn"
-      style={{ marginTop: "12px" }}
-    >
-      {"> RESET PNL BASELINE <"}
-    </button>
-
+      <button
+        onClick={resetPnlBaseline}
+        className="copy-btn"
+        style={{ marginTop: "12px" }}
+      >
+        {"> RESET PNL BASELINE <"}
+      </button>
     </div>
-    )}
+  </div>
+) : null}
 
         <h2 className="strategy-library-title">TRADE SETUP</h2>
 
