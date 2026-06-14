@@ -710,8 +710,8 @@ details[open] summary::before {
   justify-self: center;
   width: 420px !important;
   max-width: 420px !important;
-  text-align: center;
-  text-align-last: center;
+  text-align: left;
+  text-align-last: left;
 }
 
 select {
@@ -719,6 +719,7 @@ select {
   -webkit-appearance: none;
   -moz-appearance: none;
 
+  padding-left: 20px;
   padding-right: 65px;
 
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2300ff41' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
