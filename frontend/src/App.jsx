@@ -168,17 +168,6 @@ useEffect(() => {
   return () => clearInterval(timer);
 }, []);
 
-
-useEffect(() => {
-  if (walletAddress) {
-    loadPortfolio();
-  } else {
-    setPortfolio(null);
-    setStartingPortfolioValue(null);
-  }
-}, [walletAddress]);
-
-
   function parsePercent(value) {
     return parseFloat(String(value).replace("%", ""));
   }
@@ -313,15 +302,25 @@ Best eligible risk-adjusted score among all tested combinations.
         method: "eth_requestAccounts"
       });
 
-      setWalletAddress(accounts[0]);
+      const address = accounts[0];
+      setWalletAddress(address);
 
-      await forceBnbChain();
+      try {
+        await forceBnbChain();
+      } catch (networkError) {
+        console.error("NETWORK SWITCH FAILED:", networkError);
+      }
 
-      await updateWalletData(accounts[0]);
+      try {
+        await updateWalletData(address);
+      } catch (balanceError) {
+        console.error("USER WALLET BALANCE LOAD FAILED:", balanceError);
+      }
+
       await loadPortfolio();
     } catch (error) {
       console.error(error);
-      alert("WALLET CONNECTION OR NETWORK SWITCH FAILED");
+      alert("WALLET CONNECTION FAILED");
     }
   }
 
@@ -624,7 +623,7 @@ async function loadTradeHistory() {
   </button>
 </div>
 
-{walletAddress && (
+        {walletAddress && (
   <div className="panel portfolio-panel">
     <div className="panel-title">AGENT PORTFOLIO</div>
 
