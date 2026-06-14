@@ -19,6 +19,7 @@ function App() {
   const [coin, setCoin] = useState("BNB");
   const [timeframe, setTimeframe] = useState("4H");
   const [risk, setRisk] = useState("medium");
+  const [tradeSize, setTradeSize] = useState(0.001);
   const [initialCapital, setInitialCapital] = useState(10000);
   const [result, setResult] = useState(null);
   const [agentResult, setAgentResult] = useState(null);
@@ -30,6 +31,7 @@ function App() {
   const [liveExecution, setLiveExecution] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState("");
+  const [activeButton, setActiveButton] = useState("");
   const [walletAddress, setWalletAddress] = useState(null);
   const [walletChainId, setWalletChainId] = useState(null);
   const [bnbBalance, setBnbBalance] = useState(null);
@@ -79,12 +81,49 @@ function App() {
   function getOverallRating() {
     const score = Number(result?.backtest?.risk_adjusted_score ?? 0);
 
-    if (score >= 10) return "A";
-    if (score >= 7) return "B+";
-    if (score >= 5) return "B";
+    if (score >= 12) return "A+";
+    if (score >= 9) return "A";
+    if (score >= 6) return "B";
     if (score >= 3) return "C";
 
-    return "D";
+    return "F";
+  }
+
+  function getRatingExplanation() {
+    const rating = getOverallRating();
+
+    if (rating === "A+") return "EXCELLENT RISK-ADJUSTED SCORE";
+    if (rating === "A") return "STRONG RISK-ADJUSTED SCORE";
+    if (rating === "B") return "DECENT RISK-ADJUSTED SCORE";
+    if (rating === "C") return "WEAK / PASSABLE RISK-ADJUSTED SCORE";
+
+    return "FAILED / POOR RISK-ADJUSTED SCORE";
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "N/A";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "N/A";
+
+    return date.toLocaleString("de-DE");
+  }
+
+  function getButtonStyle(name) {
+    return activeButton === name
+      ? {
+          background: "rgba(0, 255, 65, 0.16)",
+          boxShadow: "0 0 18px rgba(0, 255, 65, 0.85)",
+          borderColor: "#ffffff",
+        }
+      : {};
+  }
+
+  function pulseButton(name) {
+    setActiveButton(name);
+    setTimeout(() => {
+      setActiveButton("");
+    }, 900);
   }
 
   function isApproved() {
@@ -95,6 +134,8 @@ function App() {
 }
 
 async function startAutonomousMode() {
+  pulseButton("run");
+
   try {
     const response = await fetch(`${API_BASE}/autonomous/start`, {
       method: "POST",
@@ -107,6 +148,7 @@ async function startAutonomousMode() {
         risk,
         initial_capital: initialCapital,
         live_execution: liveExecution,
+        trade_size: tradeSize,
         selected_strategy: result?.selected_strategy || null,
         interval_minutes: autonomousInterval,
       }),
@@ -122,6 +164,8 @@ async function startAutonomousMode() {
 }
 
 async function stopAutonomousMode() {
+  pulseButton("stop");
+
   try {
     const response = await fetch(`${API_BASE}/autonomous/stop`, {
       method: "POST",
@@ -292,6 +336,8 @@ Best eligible risk-adjusted score among all tested combinations.
   }
 
   async function connectWallet() {
+    pulseButton("wallet");
+
     if (!window.ethereum) {
       alert("NO WALLET FOUND. INSTALL TRUST WALLET OR METAMASK.");
       return;
@@ -361,6 +407,7 @@ Best eligible risk-adjusted score among all tested combinations.
   }
 
   async function generateStrategy() {
+    pulseButton("generate");
     setLoading(true);
     setLoadingMode("generate");
     setResult(null);
@@ -391,6 +438,7 @@ Best eligible risk-adjusted score among all tested combinations.
   }
 
   async function optimizeStrategy() {
+    pulseButton("optimize");
     setLoading(true);
     setLoadingMode("optimize");
     setResult(null);
@@ -468,6 +516,8 @@ Best eligible risk-adjusted score among all tested combinations.
   }
 
 async function runAgentCycle() {
+  pulseButton("run");
+
   try {
     const response = await fetch(`${API_BASE}/agent-cycle`, {
       method: "POST",
@@ -478,6 +528,7 @@ async function runAgentCycle() {
         coin,
         timeframe,
         risk,
+        trade_size: tradeSize,
         live_execution: liveExecution,
         selected_strategy: result?.selected_strategy || null,
       }),
@@ -551,6 +602,8 @@ setPortfolio({
   }
 
 function resetPnlBaseline() {
+  pulseButton("resetPnl");
+
   if (!portfolio) {
     alert("LOAD PORTFOLIO FIRST");
     return;
@@ -596,11 +649,21 @@ async function loadTradeHistory() {
         <div className="panel-title">QUICK START ACTIONS</div>
 
 <div className="agent-control-panel">
-  <button onClick={optimizeStrategy} disabled={loading} className="copy-btn">
+  <button
+    onClick={optimizeStrategy}
+    disabled={loading}
+    className="copy-btn"
+    style={getButtonStyle("optimize")}
+  >
     {loading && loadingMode === "optimize" ? "OPTIMIZING..." : "> AUTO-OPTIMIZE SETUP <"}
   </button>
 
-  <button onClick={connectWallet} disabled={loading} className="copy-btn">
+  <button
+    onClick={connectWallet}
+    disabled={loading}
+    className="copy-btn"
+    style={getButtonStyle("wallet")}
+  >
     {walletAddress ? "WALLET CONNECTED" : "> CONNECT WALLET <"}
   </button>
 </div>
@@ -610,16 +673,18 @@ async function loadTradeHistory() {
     onClick={runAgentCycle}
     disabled={loading}
     className="copy-btn"
+    style={getButtonStyle("run")}
   >
-    {"> RUN AGENT <"}
+    {activeButton === "run" ? "> RUNNING... <" : "> RUN AGENT <"}
   </button>
 
   <button
     onClick={stopAutonomousMode}
     disabled={loading}
     className="copy-btn"
+    style={getButtonStyle("stop")}
   >
-    {"> STOP AGENT <"}
+    {activeButton === "stop" ? "> STOPPING... <" : "> STOP AGENT <"}
   </button>
 </div>
 
@@ -654,7 +719,7 @@ async function loadTradeHistory() {
       <button
         onClick={resetPnlBaseline}
         className="copy-btn"
-        style={{ marginTop: "12px" }}
+        style={{ marginTop: "12px", ...getButtonStyle("resetPnl") }}
       >
         {"> RESET PNL BASELINE <"}
       </button>
@@ -724,14 +789,44 @@ async function loadTradeHistory() {
               />
             </div>
           </div>
+
+          <div>
+            <label>TRADE SIZE</label>
+
+            <div className="capital-input">
+              <span>{coin}</span>
+
+              <input
+                type="number"
+                min="0"
+                step="0.001"
+                value={tradeSize}
+                disabled={loading}
+                onChange={(e) => setTradeSize(Number(e.target.value))}
+              />
+            </div>
+          </div>
         </div>
 
        
 
+        {result && (
+          <div className="metrics strategy-library-box" style={{ marginTop: "26px" }}>
+            <p>AUTO-OPTIMIZER SELECTED TIMEFRAME..... {result.timeframe || timeframe}</p>
+            <p>AUTO-OPTIMIZER SELECTED STRATEGY...... {result.selected_strategy || "N/A"}</p>
+            <p>AUTO-OPTIMIZER SELECTED RISK.......... {String(result.risk || risk).toUpperCase()}</p>
+          </div>
+        )}
+
         <h2 className="strategy-library-title">CUSTOM SETUP</h2>
 
         <div className="agent-control-panel">
-          <button onClick={generateStrategy} disabled={loading} className="copy-btn">
+          <button
+            onClick={generateStrategy}
+            disabled={loading}
+            className="copy-btn"
+            style={getButtonStyle("generate")}
+          >
             {loading && loadingMode === "generate" ? "GENERATING..." : "> GENERATE STRATEGY <"}
           </button>
 
@@ -746,6 +841,10 @@ async function loadTradeHistory() {
     : "TEST MODE ON / LIVE TRADE OFF"}
 </span>
         </button>
+
+          <label style={{ gridColumn: "1 / -1", textAlign: "center", marginTop: "10px" }}>
+            AUTO CHECK FOR NEW TRADE OPPORTUNITY EVERY
+          </label>
 
           <select
             value={autonomousInterval}
@@ -792,6 +891,8 @@ async function loadTradeHistory() {
   <p>AGENT ADDRESS...... {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
   <p>CHAIN.............. BSC</p>
   <p>EXECUTION.......... {liveExecution ? "LIVE ENABLED" : "DISABLED"}</p>
+  <p>SELECTED TIMEFRAME.. {timeframe}</p>
+  <p>TRADE SIZE.......... {tradeSize} {coin}</p>
   <p>AGENT STATUS....... {autonomousMode ? "LIVE TRADING READY" : "STOPPED"}</p>
 </div>
 
@@ -801,7 +902,7 @@ async function loadTradeHistory() {
     <p>CHECK INTERVAL...... {autonomousInterval} MINUTES</p>
     <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
     <p>LAST REASON......... {autonomousStatus?.last_reason || "N/A"}</p>
-    <p>NEXT CHECK.......... {autonomousStatus?.next_run || "N/A"}</p>
+    <p>NEXT CHECK.......... {formatDateTime(autonomousStatus?.next_run)}</p>
   </div>
 </div>
 
@@ -845,9 +946,7 @@ const isRealTrade =
   trade.status === "blocked" ||
   trade.from_token ||
   trade.to_token;
-    const timestamp = trade.timestamp
-      ? new Date(trade.timestamp).toLocaleString("de-DE")
-      : "N/A";
+    const timestamp = formatDateTime(trade.timestamp);
 
     const tradeSize =
       trade.amount ||
@@ -954,12 +1053,14 @@ const isRealTrade =
         <div className="panel">
           <div className="panel-title">RESULTS</div>
 
-          <h2>STRATEGY ASSESSMENT</h2>
+          <h2 style={{ marginTop: "8px" }}>STRATEGY ASSESSMENT</h2>
 
           <div className="metrics">
             <p>STRATEGY............ {result.selected_strategy}</p>
             <p>STATUS.............. {isApproved() ? "APPROVED" : "REJECTED"}</p>
             <p>RATING.............. {getOverallRating()}</p>
+            <p>RATING BASIS........ {getRatingExplanation()}</p>
+            <p>RATING SCALE........ A+ / A / B / C / F</p>
             <p>RETURN.............. {result.backtest.net_return}</p>
             <p>MAX DRAWDOWN........ {result.backtest.max_drawdown}</p>
             <p>WIN RATE............ {result.backtest.win_rate}</p>
@@ -1177,7 +1278,7 @@ const isRealTrade =
             </div>
           </details>
 
-          <details>
+          <details style={{ marginTop: "24px" }}>
             <summary>STRATEGY BACKTEST HISTORY</summary>
 
             <div className="trade-table">
@@ -1209,7 +1310,7 @@ const isRealTrade =
           </details>
 
        
-          <details>
+          <details style={{ marginTop: "24px" }}>
             <summary>PERFORMANCE METRICS EXPLAINED</summary>
 
             <div className="metrics">
