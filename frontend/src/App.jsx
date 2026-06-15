@@ -32,6 +32,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState("");
   const [activeButton, setActiveButton] = useState("");
+  const [autoOptimized, setAutoOptimized] = useState(false);
+  const [agentStopConfirmed, setAgentStopConfirmed] = useState(false);
   const [walletAddress, setWalletAddress] = useState(null);
   const [walletChainId, setWalletChainId] = useState(null);
   const [bnbBalance, setBnbBalance] = useState(null);
@@ -110,7 +112,13 @@ function App() {
   }
 
   function getButtonStyle(name) {
-    return activeButton === name
+    const isPersistentActive =
+      (name === "wallet" && walletAddress) ||
+      (name === "optimize" && autoOptimized) ||
+      (name === "run" && autonomousMode) ||
+      (name === "stop" && agentStopConfirmed && !autonomousMode);
+
+    return activeButton === name || isPersistentActive
       ? {
           background: "rgba(0, 255, 65, 0.16)",
           boxShadow: "0 0 18px rgba(0, 255, 65, 0.85)",
@@ -157,6 +165,7 @@ async function startAutonomousMode() {
     const data = await response.json();
     setAutonomousStatus(data);
     setAutonomousMode(true);
+    setAgentStopConfirmed(false);
   } catch (err) {
     console.error(err);
     alert("AUTONOMOUS MODE START FAILED");
@@ -174,6 +183,7 @@ async function stopAutonomousMode() {
     const data = await response.json();
     setAutonomousStatus(data);
     setAutonomousMode(false);
+    setAgentStopConfirmed(true);
   } catch (err) {
     console.error(err);
     alert("AUTONOMOUS MODE STOP FAILED");
@@ -188,6 +198,10 @@ async function loadAutonomousStatus() {
     setAutonomousStatus(data);
     setAutonomousMode(data.running === true);
 
+    if (data.running === true) {
+      setAgentStopConfirmed(false);
+    }
+
     if (data.interval_minutes) {
       setAutonomousInterval(data.interval_minutes);
 }
@@ -201,6 +215,8 @@ async function loadAutonomousStatus() {
 }
 
 useEffect(() => {
+  document.title = "StrategyForge";
+
   loadAutonomousStatus();
   checkRegistration();
   loadTradeHistory();
@@ -408,6 +424,7 @@ Best eligible risk-adjusted score among all tested combinations.
 
   async function generateStrategy() {
     pulseButton("generate");
+    setAutoOptimized(false);
     setLoading(true);
     setLoadingMode("generate");
     setResult(null);
@@ -439,6 +456,7 @@ Best eligible risk-adjusted score among all tested combinations.
 
   async function optimizeStrategy() {
     pulseButton("optimize");
+    setAutoOptimized(false);
     setLoading(true);
     setLoadingMode("optimize");
     setResult(null);
@@ -485,6 +503,8 @@ Best eligible risk-adjusted score among all tested combinations.
 
       setTimeframe(best.timeframe);
       setRisk(best.risk);
+
+      setAutoOptimized(true);
 
       setResult({
         coin: best.coin,
@@ -633,7 +653,7 @@ async function loadTradeHistory() {
     <div className="terminal">
       <div className="topbar">
         <span>SF v0.1.0</span>
-        <span>BERGMANN STRATEGY TERMINAL</span>
+        <span>BERGMANN TRADING PRESENTS</span>
         <span>AI ONLINE</span>
       </div>
 
@@ -655,7 +675,15 @@ async function loadTradeHistory() {
     className="copy-btn"
     style={getButtonStyle("optimize")}
   >
-    {loading && loadingMode === "optimize" ? "OPTIMIZING..." : "> AUTO-OPTIMIZE SETUP <"}
+    {loading && loadingMode === "optimize" ? (
+      <>
+        OPTIMIZING<span className="loading-dots"></span>
+      </>
+    ) : autoOptimized ? (
+      "AUTO-OPTIMIZED"
+    ) : (
+      "> AUTO-OPTIMIZE SETUP <"
+    )}
   </button>
 
   <button
@@ -675,7 +703,7 @@ async function loadTradeHistory() {
     className="copy-btn"
     style={getButtonStyle("run")}
   >
-    {activeButton === "run" ? "> RUNNING... <" : "> RUN AGENT <"}
+    {autonomousMode ? "AGENT RUNNING" : activeButton === "run" ? "> RUNNING... <" : "> RUN AGENT <"}
   </button>
 
   <button
@@ -684,7 +712,11 @@ async function loadTradeHistory() {
     className="copy-btn"
     style={getButtonStyle("stop")}
   >
-    {activeButton === "stop" ? "> STOPPING... <" : "> STOP AGENT <"}
+    {agentStopConfirmed && !autonomousMode
+      ? "AGENT STOPPED"
+      : activeButton === "stop"
+      ? "> STOPPING... <"
+      : "> STOP AGENT <"}
   </button>
 </div>
 
@@ -791,11 +823,9 @@ async function loadTradeHistory() {
           </div>
 
           <div>
-            <label>TRADE SIZE</label>
+            <label>TRADE SIZE ({coin})</label>
 
-            <div className="capital-input">
-              <span>{coin}</span>
-
+            <div className="capital-input trade-size-input">
               <input
                 type="number"
                 min="0"
