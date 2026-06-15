@@ -76,6 +76,17 @@ DAILY_QUALIFICATION_STATE = {
     "last_status": "WAITING",
 }
 
+PAPER_PORTFOLIO = {
+    "starting_balance_usdt": 1000.0,
+    "cash_usdt": 1000.0,
+    "bnb_balance": 0.0,
+    "realized_pnl_usdt": 0.0,
+    "unrealized_pnl_usdt": 0.0,
+    "peak_value_usdt": 1000.0,
+    "open_positions": [],
+    "closed_trades": [],
+}
+
 class StrategyRequest(BaseModel):
     coin: str
     timeframe: str
@@ -97,12 +108,17 @@ class ExecuteTradeRequest(BaseModel):
     quote_only: bool = True
 
 
+class PaperResetRequest(BaseModel):
+    starting_balance_usdt: float = 1000
+
+
 class AgentCycleRequest(BaseModel):
     coin: str = "BNB"
     timeframe: str = "1H"
     risk: str = "low"
     initial_capital: float = 10000
     live_execution: bool = False
+    execution_mode: str = "decision_simulation"
     trade_size: float = 0.001
     selected_strategy: str | None = None
 
@@ -112,6 +128,7 @@ class AutonomousRequest(BaseModel):
     risk: str = "low"
     initial_capital: float = 10000
     live_execution: bool = False
+    execution_mode: str = "decision_simulation"
     trade_size: float = 0.001
     selected_strategy: str | None = None
     interval_minutes: int = 5
@@ -528,7 +545,7 @@ def build_forced_daily_trade_plan(request, portfolio_items, cmc_signal):
         "requested_trade_size_token": "BNB",
         "from_token": from_token,
         "to_token": to_token,
-        "quote_only": not request.live_execution,
+        "quote_only": not live_execution_enabled,
         "type": "daily_qualification_trade",
         "take_profit_pct": DAILY_QUALIFICATION_STATE["take_profit_pct"],
         "stop_loss_pct": DAILY_QUALIFICATION_STATE["stop_loss_pct"],
@@ -590,10 +607,224 @@ def maybe_build_forced_trade_close_plan(request, cmc_signal):
         "amount": amount,
         "from_token": from_token,
         "to_token": to_token,
-        "quote_only": not request.live_execution,
+        "quote_only": not live_execution_enabled,
         "type": "daily_qualification_close",
         "pnl_pct": round(pnl_pct, 4),
         "reason": exit_reason,
+    }
+
+
+
+
+def reset_paper_portfolio(starting_balance_usdt=1000.0):
+    starting_balance_usdt = max(0.0, safe_float(starting_balance_usdt, 1000.0))
+
+    PAPER_PORTFOLIO["starting_balance_usdt"] = starting_balance_usdt
+    PAPER_PORTFOLIO["cash_usdt"] = starting_balance_usdt
+    PAPER_PORTFOLIO["bnb_balance"] = 0.0
+    PAPER_PORTFOLIO["realized_pnl_usdt"] = 0.0
+    PAPER_PORTFOLIO["unrealized_pnl_usdt"] = 0.0
+    PAPER_PORTFOLIO["peak_value_usdt"] = starting_balance_usdt
+    PAPER_PORTFOLIO["open_positions"] = []
+    PAPER_PORTFOLIO["closed_trades"] = []
+
+    return get_paper_portfolio_status()
+
+
+def get_paper_portfolio_status(price_usd=None):
+    price_usd = safe_float(price_usd, 0.0)
+
+    bnb_value = PAPER_PORTFOLIO["bnb_balance"] * price_usd if price_usd > 0 else 0.0
+    total_value = PAPER_PORTFOLIO["cash_usdt"] + bnb_value
+
+    unrealized = 0.0
+
+    if price_usd > 0:
+        for position in PAPER_PORTFOLIO["open_positions"]:
+            entry_price = safe_float(position.get("entry_price_usd"), 0.0)
+            amount_bnb = safe_float(position.get("amount_bnb"), 0.0)
+
+            if entry_price > 0 and amount_bnb > 0:
+                unrealized += (price_usd - entry_price) * amount_bnb
+
+    PAPER_PORTFOLIO["unrealized_pnl_usdt"] = round(unrealized, 6)
+    PAPER_PORTFOLIO["peak_value_usdt"] = max(PAPER_PORTFOLIO["peak_value_usdt"], total_value)
+
+    total_pnl = total_value - PAPER_PORTFOLIO["starting_balance_usdt"]
+    return_pct = 0.0
+
+    if PAPER_PORTFOLIO["starting_balance_usdt"] > 0:
+        return_pct = (total_pnl / PAPER_PORTFOLIO["starting_balance_usdt"]) * 100
+
+    drawdown_pct = 0.0
+    if PAPER_PORTFOLIO["peak_value_usdt"] > 0:
+        drawdown_pct = max(
+            0.0,
+            ((PAPER_PORTFOLIO["peak_value_usdt"] - total_value) / PAPER_PORTFOLIO["peak_value_usdt"]) * 100,
+        )
+
+    return {
+        "starting_balance_usdt": round(PAPER_PORTFOLIO["starting_balance_usdt"], 6),
+        "cash_usdt": round(PAPER_PORTFOLIO["cash_usdt"], 6),
+        "bnb_balance": round(PAPER_PORTFOLIO["bnb_balance"], 8),
+        "bnb_value_usdt": round(bnb_value, 6),
+        "total_value_usdt": round(total_value, 6),
+        "realized_pnl_usdt": round(PAPER_PORTFOLIO["realized_pnl_usdt"], 6),
+        "unrealized_pnl_usdt": round(PAPER_PORTFOLIO["unrealized_pnl_usdt"], 6),
+        "total_pnl_usdt": round(total_pnl, 6),
+        "return_pct": round(return_pct, 4),
+        "drawdown_pct": round(drawdown_pct, 4),
+        "peak_value_usdt": round(PAPER_PORTFOLIO["peak_value_usdt"], 6),
+        "open_positions": PAPER_PORTFOLIO["open_positions"],
+        "closed_trades": PAPER_PORTFOLIO["closed_trades"],
+        "open_position_count": len(PAPER_PORTFOLIO["open_positions"]),
+        "closed_trade_count": len(PAPER_PORTFOLIO["closed_trades"]),
+        "price_usd": price_usd,
+    }
+
+
+def paper_portfolio_items(price_usd):
+    status = get_paper_portfolio_status(price_usd)
+
+    return [
+        {
+            "chain": "paper",
+            "type": "virtual_cash",
+            "symbol": "USDT",
+            "balance": str(status["cash_usdt"]),
+            "usdValue": status["cash_usdt"],
+        },
+        {
+            "chain": "paper",
+            "type": "virtual_asset",
+            "symbol": "BNB",
+            "balance": str(status["bnb_balance"]),
+            "usdValue": status["bnb_value_usdt"],
+        },
+    ]
+
+
+def execute_paper_trade(trade_plan, price_usd):
+    price_usd = safe_float(price_usd, 0.0)
+
+    if price_usd <= 0:
+        return {
+            "success": False,
+            "mode": "paper_trading",
+            "blocked": True,
+            "safety_message": "Paper trade blocked: missing market price.",
+        }
+
+    amount = safe_float(trade_plan.get("amount"), 0.0)
+    from_token = str(trade_plan.get("from_token", "")).upper()
+    to_token = str(trade_plan.get("to_token", "")).upper()
+    now = datetime.now(timezone.utc).isoformat()
+
+    if amount <= 0:
+        return {
+            "success": False,
+            "mode": "paper_trading",
+            "blocked": True,
+            "safety_message": "Paper trade blocked: amount is zero.",
+        }
+
+    if from_token == "USDT" and to_token == "BNB":
+        if PAPER_PORTFOLIO["cash_usdt"] < amount:
+            return {
+                "success": False,
+                "mode": "paper_trading",
+                "blocked": True,
+                "safety_message": "Paper trade blocked: not enough paper USDT.",
+                "paper_portfolio": get_paper_portfolio_status(price_usd),
+            }
+
+        amount_bnb = amount / price_usd
+        PAPER_PORTFOLIO["cash_usdt"] -= amount
+        PAPER_PORTFOLIO["bnb_balance"] += amount_bnb
+
+        position = {
+            "opened_at": now,
+            "entry_price_usd": price_usd,
+            "amount_bnb": amount_bnb,
+            "entry_value_usdt": amount,
+            "from_token": from_token,
+            "to_token": to_token,
+            "type": trade_plan.get("type", "paper_trade"),
+        }
+        PAPER_PORTFOLIO["open_positions"].append(position)
+
+        return {
+            "success": True,
+            "mode": "paper_trading",
+            "action": "paper_buy_bnb",
+            "amount_usdt": round(amount, 6),
+            "amount_bnb": round(amount_bnb, 8),
+            "price_usd": price_usd,
+            "paper_portfolio": get_paper_portfolio_status(price_usd),
+        }
+
+    if from_token == "BNB" and to_token == "USDT":
+        sell_bnb = min(amount, PAPER_PORTFOLIO["bnb_balance"])
+
+        if sell_bnb <= 0:
+            return {
+                "success": False,
+                "mode": "paper_trading",
+                "blocked": True,
+                "safety_message": "Paper trade blocked: not enough paper BNB.",
+                "paper_portfolio": get_paper_portfolio_status(price_usd),
+            }
+
+        proceeds = sell_bnb * price_usd
+        remaining_to_close = sell_bnb
+        realized_pnl = 0.0
+        closed_parts = []
+
+        while remaining_to_close > 0 and PAPER_PORTFOLIO["open_positions"]:
+            position = PAPER_PORTFOLIO["open_positions"][0]
+            position_amount = safe_float(position.get("amount_bnb"), 0.0)
+            close_amount = min(position_amount, remaining_to_close)
+            entry_price = safe_float(position.get("entry_price_usd"), price_usd)
+            part_pnl = (price_usd - entry_price) * close_amount
+
+            realized_pnl += part_pnl
+            remaining_to_close -= close_amount
+            position["amount_bnb"] = position_amount - close_amount
+
+            closed_parts.append({
+                "opened_at": position.get("opened_at"),
+                "closed_at": now,
+                "amount_bnb": round(close_amount, 8),
+                "entry_price_usd": entry_price,
+                "exit_price_usd": price_usd,
+                "pnl_usdt": round(part_pnl, 6),
+                "pnl_pct": round(((price_usd - entry_price) / entry_price) * 100, 4) if entry_price > 0 else 0.0,
+            })
+
+            if position["amount_bnb"] <= 0.00000001:
+                PAPER_PORTFOLIO["open_positions"].pop(0)
+
+        PAPER_PORTFOLIO["bnb_balance"] -= sell_bnb
+        PAPER_PORTFOLIO["cash_usdt"] += proceeds
+        PAPER_PORTFOLIO["realized_pnl_usdt"] += realized_pnl
+        PAPER_PORTFOLIO["closed_trades"].extend(closed_parts)
+
+        return {
+            "success": True,
+            "mode": "paper_trading",
+            "action": "paper_sell_bnb",
+            "amount_bnb": round(sell_bnb, 8),
+            "proceeds_usdt": round(proceeds, 6),
+            "realized_pnl_usdt": round(realized_pnl, 6),
+            "price_usd": price_usd,
+            "paper_portfolio": get_paper_portfolio_status(price_usd),
+        }
+
+    return {
+        "success": False,
+        "mode": "paper_trading",
+        "blocked": True,
+        "safety_message": f"Paper trade blocked: unsupported pair {from_token}->{to_token}.",
     }
 
 
@@ -757,6 +988,9 @@ def debug_strategies():
 @app.post("/agent-cycle")
 def agent_cycle(request: AgentCycleRequest):
     cmc_signal = get_cmc_signal(request.coin)
+    execution_mode = str(getattr(request, "execution_mode", "decision_simulation") or "decision_simulation").lower()
+    live_execution_enabled = execution_mode == "live_trading" or request.live_execution is True
+    paper_trading_enabled = execution_mode == "paper_trading"
 
     if request.selected_strategy:
         strategy = find_strategy_by_name(request.selected_strategy)
@@ -805,7 +1039,18 @@ def agent_cycle(request: AgentCycleRequest):
 
     market_bias = str(cmc_signal.get("market_bias", "unknown")).lower()
     risk_score = backtest.get("risk_adjusted_score", 0)
-    portfolio_result = run_twak_portfolio()
+    if paper_trading_enabled:
+        paper_status = get_paper_portfolio_status(cmc_signal.get("price_usd"))
+        portfolio_result = {
+            "success": True,
+            "execution_layer": "Paper Trading Engine",
+            "portfolio": paper_portfolio_items(cmc_signal.get("price_usd")),
+            "paper_portfolio": paper_status,
+        }
+    else:
+        paper_status = None
+        portfolio_result = run_twak_portfolio()
+
     raw_portfolio_items = portfolio_result.get("portfolio") or []
     portfolio_items = []
 
@@ -861,11 +1106,11 @@ def agent_cycle(request: AgentCycleRequest):
             "requested_trade_size_token": "BNB",
             "from_token": "USDT",
             "to_token": "BNB",
-            "quote_only": not request.live_execution,
+            "quote_only": not live_execution_enabled,
             "reason": (
                 "Bullish CMC bias and positive strategy score. "
                 f"User trade size target: {requested_trade_size} BNB. "
-                f"USDT → BNB live execution allowed: {request.live_execution}."
+                f"USDT → BNB live execution allowed: {live_execution_enabled}."
             ),
         }
 
@@ -873,7 +1118,7 @@ def agent_cycle(request: AgentCycleRequest):
         decision = "REDUCE_RISK"
 
         allow_live_reduce_risk = (
-            request.live_execution
+            live_execution_enabled
             and risk_score > -5
         )
 
@@ -912,7 +1157,7 @@ def agent_cycle(request: AgentCycleRequest):
                 "risk_control": risk_control,
             }
 
-        elif trade_plan["from_token"] == "BNB" and bnb_balance < float(trade_plan["amount"]):
+        elif execution_mode != "decision_simulation" and trade_plan["from_token"] == "BNB" and bnb_balance < float(trade_plan["amount"]):
             execution_result = {
                 "success": False,
                 "blocked": True,
@@ -920,7 +1165,7 @@ def agent_cycle(request: AgentCycleRequest):
                 "bnb_balance": bnb_balance,
             }
 
-        elif trade_plan["from_token"] == "USDT" and usdt_balance < float(trade_plan["amount"]):
+        elif execution_mode != "decision_simulation" and trade_plan["from_token"] == "USDT" and usdt_balance < float(trade_plan["amount"]):
             execution_result = {
                 "success": False,
                 "blocked": True,
@@ -929,26 +1174,13 @@ def agent_cycle(request: AgentCycleRequest):
             }
 
         else:
-            allowed, safety_message = validate_trade_request(
-                amount=trade_plan["amount"],
-                from_token=trade_plan["from_token"],
-                to_token=trade_plan["to_token"],
-                quote_only=trade_plan["quote_only"],
-            )
-
-            if allowed:
-                execution_result = run_twak_swap(
-                    amount=trade_plan["amount"],
-                    from_token=trade_plan["from_token"],
-                    to_token=trade_plan["to_token"],
-                    chain="bsc",
-                    slippage="1",
-                    quote_only=trade_plan["quote_only"],
+            if paper_trading_enabled:
+                execution_result = execute_paper_trade(
+                    trade_plan=trade_plan,
+                    price_usd=cmc_signal.get("price_usd"),
                 )
 
-                if execution_result["success"] and not trade_plan["quote_only"]:
-                    mark_live_trade_executed()
-
+                if execution_result.get("success") is True:
                     if trade_plan.get("type") == "daily_qualification_trade":
                         current_price = safe_float(cmc_signal.get("price_usd"), 0)
                         DAILY_QUALIFICATION_STATE["open_forced_trade"] = {
@@ -966,12 +1198,59 @@ def agent_cycle(request: AgentCycleRequest):
 
                     if trade_plan.get("type") == "daily_qualification_close":
                         DAILY_QUALIFICATION_STATE["open_forced_trade"] = None
-            else:
+
+            elif execution_mode == "decision_simulation":
                 execution_result = {
-                    "success": False,
-                    "blocked": True,
-                    "safety_message": safety_message,
+                    "success": True,
+                    "mode": "decision_simulation",
+                    "executed": False,
+                    "message": "Decision Simulation Mode: trade plan generated and logged, but no paper or live position was opened.",
                 }
+
+            else:
+                allowed, safety_message = validate_trade_request(
+                    amount=trade_plan["amount"],
+                    from_token=trade_plan["from_token"],
+                    to_token=trade_plan["to_token"],
+                    quote_only=trade_plan["quote_only"],
+                )
+
+                if allowed:
+                    execution_result = run_twak_swap(
+                        amount=trade_plan["amount"],
+                        from_token=trade_plan["from_token"],
+                        to_token=trade_plan["to_token"],
+                        chain="bsc",
+                        slippage="1",
+                        quote_only=trade_plan["quote_only"],
+                    )
+
+                    if execution_result["success"] and not trade_plan["quote_only"]:
+                        mark_live_trade_executed()
+
+                        if trade_plan.get("type") == "daily_qualification_trade":
+                            current_price = safe_float(cmc_signal.get("price_usd"), 0)
+                            DAILY_QUALIFICATION_STATE["open_forced_trade"] = {
+                                "opened_at": datetime.now(timezone.utc).isoformat(),
+                                "entry_price_usd": current_price,
+                                "direction": "long_bnb" if trade_plan["to_token"] == "BNB" else "reduce_risk",
+                                "bnb_amount": request.trade_size,
+                                "from_token": trade_plan["from_token"],
+                                "to_token": trade_plan["to_token"],
+                                "amount": trade_plan["amount"],
+                                "time_exit_at": trade_plan["time_exit_at"],
+                                "take_profit_pct": trade_plan["take_profit_pct"],
+                                "stop_loss_pct": trade_plan["stop_loss_pct"],
+                            }
+
+                        if trade_plan.get("type") == "daily_qualification_close":
+                            DAILY_QUALIFICATION_STATE["open_forced_trade"] = None
+                else:
+                    execution_result = {
+                        "success": False,
+                        "blocked": True,
+                        "safety_message": safety_message,
+                    }
 
     agent_analysis = build_agent_analysis(
         cmc_signal=cmc_signal,
@@ -987,7 +1266,8 @@ def agent_cycle(request: AgentCycleRequest):
             "coin": request.coin,
             "timeframe": request.timeframe,
             "risk": request.risk,
-            "live_execution": request.live_execution,
+            "live_execution": live_execution_enabled,
+            "execution_mode": execution_mode,
             "selected_strategy_requested": request.selected_strategy,
             "cmc_signal": cmc_signal,
             "selected_strategy": strategy["name"],
@@ -1001,6 +1281,7 @@ def agent_cycle(request: AgentCycleRequest):
             "trade_plan": trade_plan,
             "execution_result": execution_result,
             "portfolio": portfolio_result,
+            "paper_portfolio": get_paper_portfolio_status(cmc_signal.get("price_usd")) if paper_trading_enabled else None,
         }
     )
 
@@ -1009,6 +1290,8 @@ def agent_cycle(request: AgentCycleRequest):
         "mode": "agent_cycle",
         "decision": decision,
         "portfolio": portfolio_result,
+        "paper_portfolio": get_paper_portfolio_status(cmc_signal.get("price_usd")) if paper_trading_enabled else None,
+        "execution_mode": execution_mode,
         "coin": request.coin,
         "cmc_signal": cmc_signal,
         "selected_strategy_requested": request.selected_strategy,
@@ -1137,6 +1420,7 @@ def autonomous_start(request: AutonomousRequest):
         risk=request.risk,
         initial_capital=request.initial_capital,
         live_execution=request.live_execution,
+        execution_mode=request.execution_mode,
         trade_size=request.trade_size,
         selected_strategy=request.selected_strategy,
     )
@@ -1162,6 +1446,7 @@ def autonomous_start(request: AutonomousRequest):
         "status": "running",
         "interval_minutes": request.interval_minutes,
         "trade_size": request.trade_size,
+        "execution_mode": request.execution_mode,
         "next_run": AUTONOMOUS_STATE["next_run"],
         "message": "Autonomous backend loop started.",
     }
@@ -1196,6 +1481,25 @@ def debug_node():
         "npm": shutil.which("npm"),
         "npx": shutil.which("npx"),
     }
+
+@app.get("/paper-portfolio")
+def paper_portfolio(price_usd: float | None = None):
+    return {
+        "success": True,
+        "mode": "paper_trading",
+        "paper_portfolio": get_paper_portfolio_status(price_usd),
+    }
+
+
+@app.post("/paper-portfolio/reset")
+def paper_portfolio_reset(request: PaperResetRequest):
+    return {
+        "success": True,
+        "mode": "paper_trading",
+        "paper_portfolio": reset_paper_portfolio(request.starting_balance_usdt),
+        "message": "Paper portfolio reset. Live wallet and TWAK history were not touched.",
+    }
+
 
 @app.get("/portfolio")
 def portfolio():
