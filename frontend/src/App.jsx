@@ -970,7 +970,6 @@ async function loadTradeHistory() {
           </button>
 
         <div>
-          <label>EXECUTION MODE</label>
           <select
             value={executionMode}
             disabled={autonomousMode || loading}
@@ -980,9 +979,9 @@ async function loadTradeHistory() {
               setLiveExecution(mode === "live_trading");
             }}
           >
-            <option value="decision_simulation">DECISION SIMULATION</option>
-            <option value="paper_trading">PAPER TRADING</option>
-            <option value="live_trading">LIVE TRADING</option>
+            <option value="decision_simulation">EXECUTION MODE - SIMULATION</option>
+            <option value="paper_trading">EXECUTION MODE - PAPER</option>
+            <option value="live_trading">EXECUTION MODE - LIVE</option>
           </select>
         </div>
 
