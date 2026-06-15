@@ -718,8 +718,17 @@ async function loadTradeHistory() {
       <p className="subtitle">AI-POWERED TRADING STRATEGY GENERATOR</p>
 
       <div className="hero-description">
-        StrategyForge is an autonomous crypto trading terminal that compares strategies, reads market conditions,
-        explains its decisions, and can operate in Decision Simulation, Paper Trading, or Live Trading Mode through TWAK.
+        StrategyForge is an autonomous cryptocurrency trading platform powered by CoinMarketCap market intelligence,
+        Trust Wallet Agent Kit (TWAK), and Binance Smart Chain infrastructure.
+
+        It continuously analyzes market conditions, compares strategy performance,
+        backtests multiple approaches, evaluates portfolio risk, generates explainable
+        AI trade decisions, and can operate in Decision Simulation, Paper Trading,
+        or Live Trading Mode.
+
+        Every decision passes through market regime analysis, confidence scoring,
+        strategy validation, drawdown protection, portfolio risk controls,
+        and execution safety checks before a trade is approved.
       </div>
 
  
@@ -1350,7 +1359,7 @@ const isRealTrade =
 
             <br />
 
-            <p>AGENT FLOW.......... CMC → STRATEGY MODEL → RISK GOVERNOR → TWAK → BSC</p>
+            <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → BINANCE SMART CHAIN</p>
             <p>RULE ADHERENCE...... USER RISK LIMITS ENFORCED</p>
             <p>EXECUTION MODE...... {getExecutionModeLabel()}</p>
           </div>
@@ -1559,7 +1568,7 @@ const isRealTrade =
 
             <div className="metrics">
               <p><strong>WHAT STRATEGYFORGE DOES</strong></p>
-              <p>StrategyForge analyzes crypto markets, tests private strategies, scores trade quality, monitors risk, and can execute through TWAK when Live Trading Mode is enabled.</p>
+              <p>StrategyForge combines CoinMarketCap market intelligence, proprietary strategy testing, portfolio risk management, Trust Wallet Agent Kit (TWAK), and Binance Smart Chain execution into a single autonomous trading platform.</p><p>The system continuously scans market conditions, compares multiple strategies, scores trade quality, evaluates risk, generates explainable AI decisions, and can operate in Simulation, Paper Trading, or Live Trading mode.</p>
 
               <br />
 
