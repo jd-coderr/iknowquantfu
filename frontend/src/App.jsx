@@ -381,6 +381,44 @@ useEffect(() => {
     return "FAILED";
   }
 
+  function getExecutionTxHash() {
+    const executionResult = getExecutionResult();
+    const possibleText = [
+      executionResult?.tx_hash,
+      executionResult?.transaction_hash,
+      executionResult?.transactionHash,
+      executionResult?.hash,
+      executionResult?.stdout,
+      executionResult?.stderr,
+      executionResult?.message,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const match = possibleText.match(/0x[a-fA-F0-9]{64}/);
+    return match ? match[0] : null;
+  }
+
+  function getSignalAssetLabel() {
+    return coin || result?.coin || "N/A";
+  }
+
+  function getExecutionRouteLabel() {
+    const tradePlan = getTradePlan();
+    if (!tradePlan?.from_token && !tradePlan?.to_token) return "N/A";
+    return `${tradePlan.from_token || "N/A"} → ${tradePlan.to_token || "N/A"}`;
+  }
+
+  function getRegistrationLabel() {
+    const value = String(twakRegistration || "READY").toUpperCase();
+
+    if (value === "READY" || value === "READY_FOR_ONCHAIN_REGISTRATION") {
+      return "READY FOR ON-CHAIN REGISTRATION";
+    }
+
+    return value.replaceAll("_", " ");
+  }
+
 
   function getCmcTopSkill() {
     try {
@@ -843,7 +881,8 @@ async function loadTradeHistory() {
 
       <div className="hero-description">
         StrategyForge is an autonomous cryptocurrency trading platform powered by CoinMarketCap market intelligence,
-        Trust Wallet Agent Kit (TWAK), and Binance Smart Chain infrastructure.
+        Trust Wallet Agent Kit (TWAK), PancakeSwap execution routing,
+        and Binance Smart Chain infrastructure.
 
         It continuously analyzes market conditions, compares strategy performance,
         backtests multiple approaches, evaluates portfolio risk, generates explainable
@@ -1078,11 +1117,16 @@ async function loadTradeHistory() {
 {getTradePlan() && (
   <div className="metrics strategy-library-box last-execution-panel" style={{ marginTop: "24px" }}>
     <p><strong>LAST EXECUTION</strong></p>
-    <p>ASSET............... {coin}</p>
+    <p>SIGNAL ASSET........ {getSignalAssetLabel()}</p>
+    <p>EXECUTION ROUTE..... {getExecutionRouteLabel()}</p>
     <p>SIDE................ {getTradeSide()}</p>
     <p>SIZE................ {getTradePlan()?.amount || "N/A"} {getTradePlan()?.from_token || ""}</p>
     <p>REQUESTED SIZE...... {getTradePlan()?.requested_trade_size ?? tradeSize} {getTradePlan()?.requested_trade_size_token || coin}</p>
     <p>TX STATUS........... {getExecutionTxStatus()}</p>
+    <p>TX HASH............. {getExecutionTxHash() || "N/A"}</p>
+    {getExecutionTxHash() && (
+      <p>BSCSCAN............. https://bscscan.com/tx/{getExecutionTxHash()}</p>
+    )}
     <p>CHAIN............... BSC</p>
     <p>SOURCE.............. {executionMode === "paper_trading" ? "PAPER TRADING ENGINE" : executionMode === "live_trading" ? "TWAK → PANCAKESWAP" : "DECISION SIMULATION"}</p>
   </div>
@@ -1214,7 +1258,8 @@ async function loadTradeHistory() {
   <p>CHAIN.............. BSC</p>
   <p>EXECUTION MODE..... {getExecutionModeLabel()}</p>
   <p>SELECTED TIMEFRAME.. {timeframe}</p>
-  <p>TRADE SIZE.......... {tradeSize} {coin}</p>
+  <p>SIGNAL ASSET........ {getSignalAssetLabel()}</p>
+  <p>TRADE SIZE.......... {tradeSize} BNB TARGET</p>
   <p>TRADE CONFIDENCE.... {agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score} / 100` : "N/A"}</p>
   <p>DRAWDOWN............ {agentResult?.risk_control?.current_drawdown_pct !== undefined ? `${agentResult.risk_control.current_drawdown_pct}%` : "N/A"}</p>
   <p>RISK STATUS......... {agentResult?.risk_control?.status || "N/A"}</p>
@@ -1257,7 +1302,7 @@ async function loadTradeHistory() {
 
 {agentResult?.confidence_score !== undefined && (
   <div className="metrics strategy-library-box" style={{ marginTop: "24px" }}>
-    <p><strong>{coin} TRADE CONFIDENCE</strong></p>
+    <p><strong>{getTradePlan()?.to_token === "BNB" || getTradePlan()?.from_token === "BNB" ? "BNB EXECUTION CONFIDENCE" : `${coin} TRADE CONFIDENCE`}</strong></p>
     <p>OVERALL CONFIDENCE.... {agentResult.confidence_score} / 100</p>
     <p>RECOMMENDATION........ {agentResult.decision || "N/A"}</p>
 
@@ -1325,10 +1370,16 @@ async function loadTradeHistory() {
     const status = String(trade.status || "").toLowerCase();
     const decision = String(trade.decision || "").toUpperCase();
 
+const executionResult = trade.execution_result || trade.result || {};
+const tradePlan = trade.trade_plan || {};
 const isRealTrade =
   status === "success" ||
   status === "failed" ||
   status === "blocked" ||
+  executionResult.success === true ||
+  executionResult.executed === true ||
+  tradePlan.from_token ||
+  tradePlan.to_token ||
   trade.from_token ||
   trade.to_token;
 
@@ -1340,13 +1391,34 @@ const isRealTrade =
   .slice()
   .reverse()
   .map((trade, index) => {
+const executionResult = trade.execution_result || trade.result || {};
+const tradePlan = trade.trade_plan || {};
 const isRealTrade =
   trade.status === "success" ||
   trade.status === "failed" ||
   trade.status === "blocked" ||
+  executionResult.success === true ||
+  executionResult.executed === true ||
+  tradePlan.from_token ||
+  tradePlan.to_token ||
   trade.from_token ||
   trade.to_token;
     const timestamp = formatDateTime(trade.timestamp);
+    const txText = [
+      executionResult.tx_hash,
+      executionResult.transaction_hash,
+      executionResult.transactionHash,
+      executionResult.hash,
+      executionResult.stdout,
+      executionResult.stderr,
+      executionResult.message,
+    ].filter(Boolean).join(" ");
+    const txMatch = txText.match(/0x[a-fA-F0-9]{64}/);
+    const txHash = txMatch ? txMatch[0] : null;
+    const executionRoute =
+      tradePlan.from_token || trade.from_token
+        ? `${tradePlan.from_token || trade.from_token} → ${tradePlan.to_token || trade.to_token}`
+        : null;
 
     const tradeSize =
       trade.amount ||
@@ -1414,12 +1486,26 @@ const isRealTrade =
   </p>
 )}
 
-{(trade.coin || trade.from_token) && (
-  <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
-    ASSET:{" "}
-    {trade.coin ||
-      `${trade.from_token} → ${trade.to_token}`}
-  </p>
+{(trade.coin || executionRoute) && (
+  <>
+    <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
+      SIGNAL ASSET: {trade.coin || "N/A"}
+    </p>
+    <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
+      EXECUTION ROUTE: {executionRoute || "N/A"}
+    </p>
+  </>
+)}
+
+{txHash && (
+  <>
+    <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
+      TX HASH: {txHash}
+    </p>
+    <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
+      BSCSCAN: https://bscscan.com/tx/{txHash}
+    </p>
+  </>
 )}
 
 <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
@@ -1518,7 +1604,8 @@ const isRealTrade =
           <div className="metrics">
             <p>DATA SOURCE......... CoinMarketCap Agent Hub</p>
             <p>EXECUTION LAYER..... Trust Wallet Agent Kit</p>
-            <p>VENUE............... BNB Chain / BSC</p>
+            <p>ROUTING VENUE....... PancakeSwap</p>
+            <p>SETTLEMENT CHAIN.... BNB Chain / BSC</p>
 
             <br />
 
@@ -1534,7 +1621,7 @@ const isRealTrade =
 
             <br />
 
-            <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → BINANCE SMART CHAIN</p>
+            <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → PANCAKESWAP → BINANCE SMART CHAIN</p>
             <p>RULE ADHERENCE...... USER RISK LIMITS ENFORCED</p>
             <p>EXECUTION MODE...... {getExecutionModeLabel()}</p>
           </div>
@@ -1743,14 +1830,14 @@ const isRealTrade =
 
             <div className="metrics">
               <p><strong>WHAT STRATEGYFORGE DOES</strong></p>
-              <p>StrategyForge combines CoinMarketCap market intelligence, proprietary strategy testing, portfolio risk management, Trust Wallet Agent Kit (TWAK), and Binance Smart Chain execution into a single autonomous trading platform.</p><p>The system continuously scans market conditions, compares multiple strategies, scores trade quality, evaluates risk, generates explainable AI decisions, and can operate in Simulation, Paper Trading, or Live Trading mode.</p>
+              <p>StrategyForge combines CoinMarketCap market intelligence, proprietary strategy testing, portfolio risk management, Trust Wallet Agent Kit (TWAK), PancakeSwap routing, and Binance Smart Chain settlement into a single autonomous trading platform.</p><p>The system continuously scans market conditions, compares multiple strategies, scores trade quality, evaluates risk, generates explainable AI decisions, and can operate in Simulation, Paper Trading, or Live Trading mode.</p>
 
               <br />
 
               <p><strong>EXECUTION MODES</strong></p>
               <p>Decision Simulation: the agent generates and logs decisions only. No live trade and no virtual position is opened.</p>
               <p>Paper Trading: the agent opens and closes virtual positions, tracks paper PnL, and can be reset without touching the live wallet.</p>
-              <p>Live Trading: the agent attempts real TWAK execution using the connected/on-chain wallet setup.</p>
+              <p>Live Trading: the agent attempts real TWAK execution, routes swaps through PancakeSwap, and settles transactions on BNB Smart Chain.</p>
 
               <br />
 
@@ -1814,10 +1901,14 @@ const isRealTrade =
       <p>CHAIN.............. BNB SMART CHAIN / BSC</p>
       <p>CMC AGENT HUB...... CONNECTED</p>
       <p>TWAK EXECUTION..... {twakStatus || "CONFIGURED"}</p>
-      <p>REGISTRATION....... {String(twakRegistration || "READY").toUpperCase()}</p>
+      <p>REGISTRATION....... {getRegistrationLabel()}</p>
       <p>AGENT ADDRESS...... {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
       <p>SELECTED TOKEN..... {coin}</p>
       <p>ELIGIBLE TOKEN..... BSC / CMC-LISTED TOKEN</p>
+      <p>LAST TX HASH....... {getExecutionTxHash() || "N/A"}</p>
+      {getExecutionTxHash() && (
+        <p>BSCSCAN............ https://bscscan.com/tx/{getExecutionTxHash()}</p>
+      )}
 
       <br />
 
@@ -1835,7 +1926,7 @@ const isRealTrade =
 
 
       <div className="footer">
-        CMC AGENT HUB: OK &nbsp;&nbsp; TWAK: OK &nbsp;&nbsp; BNB CHAIN: OK &nbsp;&nbsp; BACKTEST ENGINE: OK &nbsp;&nbsp; OPTIMIZER: OK
+        CMC AGENT HUB: OK &nbsp;&nbsp; TWAK: OK &nbsp;&nbsp; PANCAKESWAP: OK &nbsp;&nbsp; BNB CHAIN: OK &nbsp;&nbsp; BACKTEST ENGINE: OK &nbsp;&nbsp; OPTIMIZER: OK
       </div>
     </div>
   );
