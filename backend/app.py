@@ -65,6 +65,17 @@ RISK_STATE = {
     "status": "UNKNOWN",
 }
 
+DAILY_QUALIFICATION_STATE = {
+    "enabled": True,
+    "target_trades_per_day": 1,
+    "forced_window_minutes": 60,
+    "take_profit_pct": 2.0,
+    "stop_loss_pct": 1.0,
+    "time_exit_buffer_minutes": 5,
+    "open_forced_trade": None,
+    "last_status": "WAITING",
+}
+
 class StrategyRequest(BaseModel):
     coin: str
     timeframe: str
@@ -350,6 +361,13 @@ def build_agent_analysis(cmc_signal, backtest, portfolio_items, decision):
     if decision == "HOLD":
         confidence_score = min(confidence_score, 55)
 
+    if decision == "DAILY_QUALIFICATION_TRADE":
+        why.append("Daily qualification guard is active because no live trade was recorded today.")
+        why.append("This trade uses the smallest configured size and aims to satisfy the competition minimum trade requirement.")
+
+    if decision == "DAILY_QUALIFICATION_CLOSE":
+        why.append("Daily qualification trade is being closed by take-profit, stop-loss, or time-exit rule.")
+
     return {
         "confidence_score": confidence_score,
         "signal_breakdown": signal_breakdown,
@@ -379,6 +397,204 @@ def get_user_trade_amount(requested_trade_size, from_token, to_token, portfolio_
         return str(round(requested_trade_size, 6))
 
     return str(round(requested_trade_size, 6))
+
+
+def utc_day_bounds(now=None):
+    now = now or datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return start, end
+
+
+def minutes_until_utc_day_end(now=None):
+    now = now or datetime.now(timezone.utc)
+    _, end = utc_day_bounds(now)
+    return max(0.0, (end - now).total_seconds() / 60)
+
+
+def is_in_forced_daily_trade_window(now=None):
+    return minutes_until_utc_day_end(now) <= DAILY_QUALIFICATION_STATE["forced_window_minutes"]
+
+
+def count_live_trades_today():
+    start, end = utc_day_bounds()
+    live_trade_count = 0
+
+    for record in read_trade_log(500):
+        try:
+            timestamp = datetime.fromisoformat(str(record.get("timestamp")).replace("Z", "+00:00"))
+        except Exception:
+            continue
+
+        if not (start <= timestamp < end):
+            continue
+
+        trade_plan = record.get("trade_plan") or {}
+        execution_result = record.get("execution_result") or record.get("result") or {}
+
+        if (
+            trade_plan
+            and trade_plan.get("quote_only") is False
+            and execution_result.get("success") is True
+        ):
+            live_trade_count += 1
+
+        if (
+            record.get("quote_only") is False
+            and execution_result.get("success") is True
+        ):
+            live_trade_count += 1
+
+    return live_trade_count
+
+
+def get_daily_qualification_status():
+    trades_today = count_live_trades_today()
+    minutes_left = round(minutes_until_utc_day_end(), 2)
+    in_forced_window = is_in_forced_daily_trade_window()
+
+    if trades_today >= DAILY_QUALIFICATION_STATE["target_trades_per_day"]:
+        status = "QUALIFIED"
+    elif in_forced_window:
+        status = "FORCED TRADE WINDOW ACTIVE"
+    else:
+        status = "WAITING"
+
+    DAILY_QUALIFICATION_STATE["last_status"] = status
+
+    return {
+        "enabled": DAILY_QUALIFICATION_STATE["enabled"],
+        "status": status,
+        "trades_today": trades_today,
+        "target_trades_per_day": DAILY_QUALIFICATION_STATE["target_trades_per_day"],
+        "forced_window_minutes": DAILY_QUALIFICATION_STATE["forced_window_minutes"],
+        "minutes_until_utc_day_end": minutes_left,
+        "take_profit_pct": DAILY_QUALIFICATION_STATE["take_profit_pct"],
+        "stop_loss_pct": DAILY_QUALIFICATION_STATE["stop_loss_pct"],
+        "time_exit_buffer_minutes": DAILY_QUALIFICATION_STATE["time_exit_buffer_minutes"],
+        "open_forced_trade": DAILY_QUALIFICATION_STATE["open_forced_trade"],
+    }
+
+
+def should_force_daily_qualification_trade():
+    if not DAILY_QUALIFICATION_STATE["enabled"]:
+        return False
+
+    if count_live_trades_today() >= DAILY_QUALIFICATION_STATE["target_trades_per_day"]:
+        return False
+
+    return is_in_forced_daily_trade_window()
+
+
+def build_forced_daily_trade_plan(request, portfolio_items, cmc_signal):
+    requested_trade_size = max(0.0, safe_float(request.trade_size, 0.0))
+    market_bias = str(cmc_signal.get("market_bias", "unknown")).lower()
+
+    # Prefer the lowest-risk direction based on available assets.
+    balances = {
+        str(item.get("symbol", "")).upper(): safe_float(item.get("balance", 0))
+        for item in portfolio_items
+    }
+
+    bnb_balance = balances.get("BNB", 0.0)
+    usdt_balance = balances.get("USDT", 0.0)
+
+    if "bear" in market_bias and bnb_balance > 0:
+        from_token = "BNB"
+        to_token = "USDT"
+        amount = str(round(min(requested_trade_size, bnb_balance), 6))
+    else:
+        from_token = "USDT"
+        to_token = "BNB"
+        amount = get_user_trade_amount(
+            requested_trade_size=requested_trade_size,
+            from_token="USDT",
+            to_token="BNB",
+            portfolio_items=portfolio_items,
+        )
+
+        if safe_float(amount) <= 0 and bnb_balance > 0:
+            from_token = "BNB"
+            to_token = "USDT"
+            amount = str(round(min(requested_trade_size, bnb_balance), 6))
+
+    now = datetime.now(timezone.utc)
+    _, day_end = utc_day_bounds(now)
+    time_exit_at = day_end - timedelta(minutes=DAILY_QUALIFICATION_STATE["time_exit_buffer_minutes"])
+
+    return {
+        "amount": amount,
+        "requested_trade_size": requested_trade_size,
+        "requested_trade_size_token": "BNB",
+        "from_token": from_token,
+        "to_token": to_token,
+        "quote_only": not request.live_execution,
+        "type": "daily_qualification_trade",
+        "take_profit_pct": DAILY_QUALIFICATION_STATE["take_profit_pct"],
+        "stop_loss_pct": DAILY_QUALIFICATION_STATE["stop_loss_pct"],
+        "time_exit_at": time_exit_at.isoformat(),
+        "reason": (
+            "Daily qualification guard activated. No live trade has been recorded today. "
+            "The agent is attempting the smallest safe qualifying trade during the final UTC hour. "
+            f"Target: +{DAILY_QUALIFICATION_STATE['take_profit_pct']}%. "
+            f"Max downside guard: -{DAILY_QUALIFICATION_STATE['stop_loss_pct']}%. "
+            "Time exit before UTC day end."
+        ),
+    }
+
+
+def maybe_build_forced_trade_close_plan(request, cmc_signal):
+    open_trade = DAILY_QUALIFICATION_STATE.get("open_forced_trade")
+
+    if not open_trade:
+        return None
+
+    current_price = safe_float(cmc_signal.get("price_usd"), 0)
+    entry_price = safe_float(open_trade.get("entry_price_usd"), 0)
+
+    if current_price <= 0 or entry_price <= 0:
+        return None
+
+    opened_direction = open_trade.get("direction")
+    pnl_pct = 0.0
+
+    if opened_direction == "long_bnb":
+        pnl_pct = ((current_price - entry_price) / entry_price) * 100
+        from_token = "BNB"
+        to_token = "USDT"
+        amount = str(open_trade.get("bnb_amount", request.trade_size))
+    else:
+        # Defensive reduce-risk trade was already BNB -> USDT. No reverse close needed for qualification.
+        return None
+
+    now = datetime.now(timezone.utc)
+    time_exit_at = datetime.fromisoformat(open_trade["time_exit_at"])
+
+    should_close = (
+        pnl_pct >= DAILY_QUALIFICATION_STATE["take_profit_pct"]
+        or pnl_pct <= -DAILY_QUALIFICATION_STATE["stop_loss_pct"]
+        or now >= time_exit_at
+    )
+
+    if not should_close:
+        return None
+
+    if pnl_pct >= DAILY_QUALIFICATION_STATE["take_profit_pct"]:
+        exit_reason = "Take-profit target reached."
+    elif pnl_pct <= -DAILY_QUALIFICATION_STATE["stop_loss_pct"]:
+        exit_reason = "Stop-loss guard reached."
+    else:
+        exit_reason = "Time exit before UTC day end."
+
+    return {
+        "amount": amount,
+        "from_token": from_token,
+        "to_token": to_token,
+        "quote_only": not request.live_execution,
+        "type": "daily_qualification_close",
+        "pnl_pct": round(pnl_pct, 4),
+        "reason": exit_reason,
+    }
 
 
 @app.post("/generate-strategy")
@@ -614,8 +830,23 @@ def agent_cycle(request: AgentCycleRequest):
     decision = "HOLD"
     trade_plan = None
     execution_result = None
+    daily_qualification = get_daily_qualification_status()
 
-    if "bull" in market_bias and risk_score > 0:
+    forced_close_plan = maybe_build_forced_trade_close_plan(request, cmc_signal)
+
+    if forced_close_plan is not None:
+        decision = "DAILY_QUALIFICATION_CLOSE"
+        trade_plan = forced_close_plan
+
+    elif should_force_daily_qualification_trade():
+        decision = "DAILY_QUALIFICATION_TRADE"
+        trade_plan = build_forced_daily_trade_plan(
+            request=request,
+            portfolio_items=portfolio_items,
+            cmc_signal=cmc_signal,
+        )
+
+    elif "bull" in market_bias and risk_score > 0:
         decision = "BUY_BNB"
         trade_amount = get_user_trade_amount(
             requested_trade_size=requested_trade_size,
@@ -717,6 +948,24 @@ def agent_cycle(request: AgentCycleRequest):
 
                 if execution_result["success"] and not trade_plan["quote_only"]:
                     mark_live_trade_executed()
+
+                    if trade_plan.get("type") == "daily_qualification_trade":
+                        current_price = safe_float(cmc_signal.get("price_usd"), 0)
+                        DAILY_QUALIFICATION_STATE["open_forced_trade"] = {
+                            "opened_at": datetime.now(timezone.utc).isoformat(),
+                            "entry_price_usd": current_price,
+                            "direction": "long_bnb" if trade_plan["to_token"] == "BNB" else "reduce_risk",
+                            "bnb_amount": request.trade_size,
+                            "from_token": trade_plan["from_token"],
+                            "to_token": trade_plan["to_token"],
+                            "amount": trade_plan["amount"],
+                            "time_exit_at": trade_plan["time_exit_at"],
+                            "take_profit_pct": trade_plan["take_profit_pct"],
+                            "stop_loss_pct": trade_plan["stop_loss_pct"],
+                        }
+
+                    if trade_plan.get("type") == "daily_qualification_close":
+                        DAILY_QUALIFICATION_STATE["open_forced_trade"] = None
             else:
                 execution_result = {
                     "success": False,
@@ -747,6 +996,7 @@ def agent_cycle(request: AgentCycleRequest):
             "signal_breakdown": agent_analysis["signal_breakdown"],
             "why": agent_analysis["why"],
             "risk_control": agent_analysis["risk_control"],
+            "daily_qualification": get_daily_qualification_status(),
             "trade_size": request.trade_size,
             "trade_plan": trade_plan,
             "execution_result": execution_result,
@@ -768,6 +1018,7 @@ def agent_cycle(request: AgentCycleRequest):
         "signal_breakdown": agent_analysis["signal_breakdown"],
         "why": agent_analysis["why"],
         "risk_control": agent_analysis["risk_control"],
+        "daily_qualification": get_daily_qualification_status(),
         "trade_size": request.trade_size,
         "trade_plan": trade_plan,
         "execution_result": execution_result,
@@ -975,6 +1226,14 @@ def risk_status():
     return {
         "success": True,
         "risk_control": RISK_STATE,
+    }
+
+
+@app.get("/daily-qualification-status")
+def daily_qualification_status():
+    return {
+        "success": True,
+        "daily_qualification": get_daily_qualification_status(),
     }
 
 
