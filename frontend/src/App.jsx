@@ -923,6 +923,9 @@ async function loadTradeHistory() {
   <p>EXECUTION.......... {liveExecution ? "LIVE ENABLED" : "DISABLED"}</p>
   <p>SELECTED TIMEFRAME.. {timeframe}</p>
   <p>TRADE SIZE.......... {tradeSize} {coin}</p>
+  <p>CONFIDENCE.......... {agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score}%` : "N/A"}</p>
+  <p>DRAWDOWN............ {agentResult?.risk_control?.current_drawdown_pct !== undefined ? `${agentResult.risk_control.current_drawdown_pct}%` : "N/A"}</p>
+  <p>RISK STATUS......... {agentResult?.risk_control?.status || "N/A"}</p>
   <p>AGENT STATUS....... {autonomousMode ? "LIVE TRADING READY" : "STOPPED"}</p>
 </div>
 
@@ -937,6 +940,40 @@ async function loadTradeHistory() {
 </div>
 
   
+{agentResult?.confidence_score !== undefined && (
+  <div className="metrics strategy-library-box" style={{ marginTop: "24px" }}>
+    <p><strong>AGENT CONFIDENCE SCORE</strong></p>
+    <p>CONFIDENCE.......... {agentResult.confidence_score}%</p>
+    <p>CMC BIAS............ {agentResult.signal_breakdown?.cmc_bias ?? "N/A"}</p>
+    <p>FEAR & GREED........ {agentResult.signal_breakdown?.fear_greed ?? "N/A"}</p>
+    <p>ALTCOIN SEASON...... {agentResult.signal_breakdown?.altcoin_season ?? "N/A"}</p>
+    <p>BACKTEST SCORE...... {agentResult.signal_breakdown?.backtest_score ?? "N/A"}</p>
+    <p>DRAWDOWN SAFETY..... {agentResult.signal_breakdown?.drawdown_safety ?? "N/A"}</p>
+  </div>
+)}
+
+{agentResult?.risk_control && (
+  <div className="metrics strategy-library-box" style={{ marginTop: "24px" }}>
+    <p><strong>RISK CONTROL</strong></p>
+    <p>CURRENT VALUE....... {formatMoney(agentResult.risk_control.current_portfolio_value_usd || 0)}</p>
+    <p>BASELINE VALUE...... {formatMoney(agentResult.risk_control.baseline_portfolio_value_usd || 0)}</p>
+    <p>PEAK VALUE.......... {formatMoney(agentResult.risk_control.peak_portfolio_value_usd || 0)}</p>
+    <p>CURRENT DRAWDOWN.... {agentResult.risk_control.current_drawdown_pct ?? "N/A"}%</p>
+    <p>MAX DRAWDOWN LIMIT.. {agentResult.risk_control.max_drawdown_limit_pct ?? "N/A"}%</p>
+    <p>DAILY LOSS LIMIT.... {agentResult.risk_control.daily_loss_limit_pct ?? "N/A"}%</p>
+    <p>STATUS.............. {agentResult.risk_control.status || "N/A"}</p>
+  </div>
+)}
+
+{agentResult?.why?.length > 0 && (
+  <div className="metrics strategy-library-box" style={{ marginTop: "24px" }}>
+    <p><strong>WHY THE AGENT DECIDED</strong></p>
+    {agentResult.why.map((reason, index) => (
+      <p key={index}>✓ {reason}</p>
+    ))}
+  </div>
+)}
+
 {tradeHistory.length > 0 && (
   <div className="panel">
     <div className="panel-title">LIVE AGENT ACTIVITY</div>
@@ -1009,6 +1046,27 @@ const isRealTrade =
     ? "REAL TRADE / EXECUTION"
     : "DECISION ONLY"}
 </p>
+
+{trade.confidence_score !== undefined && (
+  <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
+    CONFIDENCE: {trade.confidence_score}%
+  </p>
+)}
+
+{trade.risk_control?.current_drawdown_pct !== undefined && (
+  <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
+    DRAWDOWN: {trade.risk_control.current_drawdown_pct}% / LIMIT {trade.risk_control.max_drawdown_limit_pct}%
+  </p>
+)}
+
+{trade.why?.length > 0 && (
+  <div style={{ color: isRealTrade ? "#00ff41" : "#808080", marginTop: "8px" }}>
+    <p>WHY:</p>
+    {trade.why.slice(0, 5).map((reason, reasonIndex) => (
+      <p key={reasonIndex}>✓ {reason}</p>
+    ))}
+  </div>
+)}
        
 
 {trade.decision && (
@@ -1131,6 +1189,8 @@ const isRealTrade =
             <p>SELECTED STRATEGY... {result.selected_strategy}</p>
             <p>RISK PROFILE........ {String(result.risk).toUpperCase()}</p>
             <p>LAST DECISION....... {getAgentDecision()}</p>
+            <p>CONFIDENCE.......... {agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score}%` : "N/A"}</p>
+            <p>RISK STATUS......... {agentResult?.risk_control?.status || "N/A"}</p>
             <p>TRADE PLAN.......... {agentResult?.trade_plan ? "GENERATED" : "NONE"}</p>
             <p>ACTION TAKEN........ {agentResult?.execution_result ? "EXECUTION ATTEMPTED" : "NONE"}</p>
 
