@@ -55,6 +55,16 @@ AUTONOMOUS_THREAD = None
 AUTONOMOUS_CONFIG = None
 
 
+RISK_STATE = {
+    "baseline_portfolio_value_usd": None,
+    "peak_portfolio_value_usd": None,
+    "current_portfolio_value_usd": 0.0,
+    "current_drawdown_pct": 0.0,
+    "max_drawdown_limit_pct": 30.0,
+    "daily_loss_limit_pct": 10.0,
+    "status": "UNKNOWN",
+}
+
 class StrategyRequest(BaseModel):
     coin: str
     timeframe: str
@@ -82,6 +92,7 @@ class AgentCycleRequest(BaseModel):
     risk: str = "low"
     initial_capital: float = 10000
     live_execution: bool = False
+    trade_size: float = 0.001
     selected_strategy: str | None = None
 
 class AutonomousRequest(BaseModel):
@@ -90,6 +101,7 @@ class AutonomousRequest(BaseModel):
     risk: str = "low"
     initial_capital: float = 10000
     live_execution: bool = False
+    trade_size: float = 0.001
     selected_strategy: str | None = None
     interval_minutes: int = 5
 
@@ -187,6 +199,186 @@ def get_hold_reason(cmc_signal):
         return "Market bias unavailable. Agent is holding until signal quality improves."
 
     return "No valid trade setup from current market conditions."
+
+
+def safe_float(value, default=0.0):
+    try:
+        return float(value or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def get_portfolio_value_usd_from_items(portfolio_items):
+    return sum(safe_float(item.get("usdValue", 0)) for item in portfolio_items)
+
+
+def get_token_price_usd(portfolio_items, symbol):
+    symbol = symbol.upper()
+
+    for item in portfolio_items:
+        if str(item.get("symbol", "")).upper() == symbol:
+            balance = safe_float(item.get("balance", 0))
+            usd_value = safe_float(item.get("usdValue", 0))
+
+            if balance > 0 and usd_value > 0:
+                return usd_value / balance
+
+    if symbol == "USDT":
+        return 1.0
+
+    return 0.0
+
+
+def update_risk_state(portfolio_items):
+    portfolio_value = get_portfolio_value_usd_from_items(portfolio_items)
+
+    if portfolio_value > 0:
+        if RISK_STATE["baseline_portfolio_value_usd"] is None:
+            RISK_STATE["baseline_portfolio_value_usd"] = portfolio_value
+
+        if RISK_STATE["peak_portfolio_value_usd"] is None:
+            RISK_STATE["peak_portfolio_value_usd"] = portfolio_value
+
+        RISK_STATE["peak_portfolio_value_usd"] = max(
+            safe_float(RISK_STATE["peak_portfolio_value_usd"]),
+            portfolio_value,
+        )
+
+    peak_value = safe_float(RISK_STATE["peak_portfolio_value_usd"])
+    current_drawdown = 0.0
+
+    if peak_value > 0:
+        current_drawdown = max(0.0, ((peak_value - portfolio_value) / peak_value) * 100)
+
+    RISK_STATE["current_portfolio_value_usd"] = portfolio_value
+    RISK_STATE["current_drawdown_pct"] = round(current_drawdown, 2)
+
+    if current_drawdown >= RISK_STATE["max_drawdown_limit_pct"]:
+        RISK_STATE["status"] = "DRAWDOWN LIMIT BREACHED"
+    elif current_drawdown >= RISK_STATE["daily_loss_limit_pct"]:
+        RISK_STATE["status"] = "WARNING"
+    else:
+        RISK_STATE["status"] = "SAFE"
+
+    return dict(RISK_STATE)
+
+
+def build_agent_analysis(cmc_signal, backtest, portfolio_items, decision):
+    market_bias = str(cmc_signal.get("market_bias", "unknown")).lower()
+    fear_greed = cmc_signal.get("fear_greed") or {}
+    altcoin_season = cmc_signal.get("altcoin_season") or {}
+    risk_score = safe_float(backtest.get("risk_adjusted_score", 0))
+    max_drawdown_text = str(backtest.get("max_drawdown", "0")).replace("%", "")
+    backtest_drawdown_pct = abs(safe_float(max_drawdown_text, 0))
+
+    signal_breakdown = {
+        "cmc_bias": 0,
+        "fear_greed": 0,
+        "altcoin_season": 0,
+        "backtest_score": 0,
+        "drawdown_safety": 0,
+    }
+
+    why = []
+
+    if "bull" in market_bias:
+        signal_breakdown["cmc_bias"] = 30
+        why.append("CMC market bias is bullish.")
+    elif "bear" in market_bias or "risk-off" in market_bias:
+        signal_breakdown["cmc_bias"] = 20
+        why.append("CMC market bias is bearish/risk-off, so the agent considers reducing risk.")
+    elif market_bias == "neutral":
+        signal_breakdown["cmc_bias"] = 8
+        why.append("CMC market bias is neutral, so the agent waits for better confirmation.")
+    else:
+        why.append("CMC market bias is unavailable or unknown.")
+
+    fg_value = safe_float(fear_greed.get("value"), 50)
+
+    if fg_value >= 60:
+        signal_breakdown["fear_greed"] = 20
+        why.append(f"Fear & Greed is supportive at {int(fg_value)}/100.")
+    elif fg_value <= 25:
+        signal_breakdown["fear_greed"] = 12
+        why.append(f"Fear & Greed is defensive at {int(fg_value)}/100.")
+    else:
+        signal_breakdown["fear_greed"] = 8
+        why.append(f"Fear & Greed is neutral at {int(fg_value)}/100.")
+
+    alt_value = safe_float(altcoin_season.get("value"), 50)
+
+    if alt_value >= 60:
+        signal_breakdown["altcoin_season"] = 10
+        why.append(f"Altcoin rotation is supportive at {int(alt_value)}/100.")
+    elif alt_value <= 25:
+        signal_breakdown["altcoin_season"] = 4
+        why.append(f"Altcoin rotation is weak at {int(alt_value)}/100.")
+    else:
+        signal_breakdown["altcoin_season"] = 6
+        why.append(f"Altcoin rotation is neutral at {int(alt_value)}/100.")
+
+    if risk_score >= 12:
+        signal_breakdown["backtest_score"] = 25
+        why.append("Backtest risk-adjusted score is excellent.")
+    elif risk_score >= 9:
+        signal_breakdown["backtest_score"] = 20
+        why.append("Backtest risk-adjusted score is strong.")
+    elif risk_score >= 6:
+        signal_breakdown["backtest_score"] = 15
+        why.append("Backtest risk-adjusted score is decent.")
+    elif risk_score >= 3:
+        signal_breakdown["backtest_score"] = 8
+        why.append("Backtest risk-adjusted score is weak/passable.")
+    else:
+        signal_breakdown["backtest_score"] = 0
+        why.append("Backtest risk-adjusted score is poor.")
+
+    risk_control = update_risk_state(portfolio_items)
+
+    if risk_control["status"] == "SAFE":
+        signal_breakdown["drawdown_safety"] = 15
+        why.append("Drawdown monitor is safe.")
+    elif risk_control["status"] == "WARNING":
+        signal_breakdown["drawdown_safety"] = 5
+        why.append("Drawdown monitor is warning; agent should reduce risk.")
+    else:
+        signal_breakdown["drawdown_safety"] = 0
+        why.append("Drawdown limit breached; live trading should be blocked.")
+
+    confidence_score = min(100, max(0, int(sum(signal_breakdown.values()))))
+
+    if decision == "HOLD":
+        confidence_score = min(confidence_score, 55)
+
+    return {
+        "confidence_score": confidence_score,
+        "signal_breakdown": signal_breakdown,
+        "why": why,
+        "risk_control": risk_control,
+    }
+
+
+def get_user_trade_amount(requested_trade_size, from_token, to_token, portfolio_items):
+    requested_trade_size = max(0.0, safe_float(requested_trade_size, 0.0))
+    from_token = from_token.upper()
+    to_token = to_token.upper()
+
+    if requested_trade_size <= 0:
+        return "0"
+
+    if from_token == "USDT" and to_token == "BNB":
+        bnb_price = get_token_price_usd(portfolio_items, "BNB")
+
+        if bnb_price <= 0:
+            return "0"
+
+        usdt_amount = requested_trade_size * bnb_price
+        return str(round(usdt_amount, 6))
+
+    if from_token == "BNB" and to_token == "USDT":
+        return str(round(requested_trade_size, 6))
+
+    return str(round(requested_trade_size, 6))
 
 
 @app.post("/generate-strategy")
@@ -416,6 +608,8 @@ def agent_cycle(request: AgentCycleRequest):
 
     bnb_balance = balances.get("BNB", 0)
     usdt_balance = balances.get("USDT", 0)
+    requested_trade_size = max(0.0, safe_float(request.trade_size, 0.0))
+    risk_control = update_risk_state(portfolio_items)
 
     decision = "HOLD"
     trade_plan = None
@@ -423,13 +617,23 @@ def agent_cycle(request: AgentCycleRequest):
 
     if "bull" in market_bias and risk_score > 0:
         decision = "BUY_BNB"
+        trade_amount = get_user_trade_amount(
+            requested_trade_size=requested_trade_size,
+            from_token="USDT",
+            to_token="BNB",
+            portfolio_items=portfolio_items,
+        )
+
         trade_plan = {
-            "amount": "1",
+            "amount": trade_amount,
+            "requested_trade_size": requested_trade_size,
+            "requested_trade_size_token": "BNB",
             "from_token": "USDT",
             "to_token": "BNB",
             "quote_only": not request.live_execution,
             "reason": (
                 "Bullish CMC bias and positive strategy score. "
+                f"User trade size target: {requested_trade_size} BNB. "
                 f"USDT → BNB live execution allowed: {request.live_execution}."
             ),
         }
@@ -442,14 +646,25 @@ def agent_cycle(request: AgentCycleRequest):
             and risk_score > -5
         )
 
+        calculated_position_size = calculate_trade_size(portfolio_items, "BNB", request.risk)
+        user_amount = get_user_trade_amount(
+            requested_trade_size=requested_trade_size,
+            from_token="BNB",
+            to_token="USDT",
+            portfolio_items=portfolio_items,
+        )
+
         trade_plan = {
-            "amount": calculate_trade_size(portfolio_items, "BNB", request.risk)["amount"],
-            "position_size": calculate_trade_size(portfolio_items, "BNB", request.risk),
+            "amount": user_amount if safe_float(user_amount) > 0 else calculated_position_size["amount"],
+            "requested_trade_size": requested_trade_size,
+            "requested_trade_size_token": "BNB",
+            "position_size": calculated_position_size,
             "from_token": "BNB",
             "to_token": "USDT",
             "quote_only": not allow_live_reduce_risk,
             "reason": (
-                "Bearish/risk-off CMC bias. Convert small BNB amount to USDT. "
+                "Bearish/risk-off CMC bias. Convert selected BNB amount to USDT. "
+                f"User trade size target: {requested_trade_size} BNB. "
                 f"Live execution allowed: {allow_live_reduce_risk}."
             ),
         }
@@ -458,7 +673,15 @@ def agent_cycle(request: AgentCycleRequest):
         decision = "HOLD"
 
     if trade_plan is not None:
-        if trade_plan["from_token"] == "BNB" and bnb_balance < float(trade_plan["amount"]):
+        if request.live_execution and risk_control["status"] == "DRAWDOWN LIMIT BREACHED":
+            execution_result = {
+                "success": False,
+                "blocked": True,
+                "safety_message": "Blocked: max drawdown limit breached.",
+                "risk_control": risk_control,
+            }
+
+        elif trade_plan["from_token"] == "BNB" and bnb_balance < float(trade_plan["amount"]):
             execution_result = {
                 "success": False,
                 "blocked": True,
@@ -501,6 +724,13 @@ def agent_cycle(request: AgentCycleRequest):
                     "safety_message": safety_message,
                 }
 
+    agent_analysis = build_agent_analysis(
+        cmc_signal=cmc_signal,
+        backtest=backtest,
+        portfolio_items=portfolio_items,
+        decision=decision,
+    )
+
     event = log_trade(
         {
             "status": "agent_cycle",
@@ -513,6 +743,11 @@ def agent_cycle(request: AgentCycleRequest):
             "cmc_signal": cmc_signal,
             "selected_strategy": strategy["name"],
             "risk_adjusted_score": risk_score,
+            "confidence_score": agent_analysis["confidence_score"],
+            "signal_breakdown": agent_analysis["signal_breakdown"],
+            "why": agent_analysis["why"],
+            "risk_control": agent_analysis["risk_control"],
+            "trade_size": request.trade_size,
             "trade_plan": trade_plan,
             "execution_result": execution_result,
             "portfolio": portfolio_result,
@@ -529,6 +764,11 @@ def agent_cycle(request: AgentCycleRequest):
         "selected_strategy_requested": request.selected_strategy,
         "selected_strategy": strategy["name"],
         "risk_adjusted_score": risk_score,
+        "confidence_score": agent_analysis["confidence_score"],
+        "signal_breakdown": agent_analysis["signal_breakdown"],
+        "why": agent_analysis["why"],
+        "risk_control": agent_analysis["risk_control"],
+        "trade_size": request.trade_size,
         "trade_plan": trade_plan,
         "execution_result": execution_result,
         "event": event,
@@ -646,6 +886,7 @@ def autonomous_start(request: AutonomousRequest):
         risk=request.risk,
         initial_capital=request.initial_capital,
         live_execution=request.live_execution,
+        trade_size=request.trade_size,
         selected_strategy=request.selected_strategy,
     )
 
@@ -669,6 +910,7 @@ def autonomous_start(request: AutonomousRequest):
         "mode": "autonomous",
         "status": "running",
         "interval_minutes": request.interval_minutes,
+        "trade_size": request.trade_size,
         "next_run": AUTONOMOUS_STATE["next_run"],
         "message": "Autonomous backend loop started.",
     }
@@ -727,6 +969,14 @@ def trade_log(limit: int = 50):
         "limit": limit,
         "records": read_trade_log(limit),
     }
+
+@app.get("/risk-status")
+def risk_status():
+    return {
+        "success": True,
+        "risk_control": RISK_STATE,
+    }
+
 
 @app.get("/agent-status")
 def agent_status():
