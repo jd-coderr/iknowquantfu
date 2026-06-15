@@ -926,6 +926,8 @@ async function loadTradeHistory() {
   <p>TRADE CONFIDENCE.... {agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score} / 100` : "N/A"}</p>
   <p>DRAWDOWN............ {agentResult?.risk_control?.current_drawdown_pct !== undefined ? `${agentResult.risk_control.current_drawdown_pct}%` : "N/A"}</p>
   <p>RISK STATUS......... {agentResult?.risk_control?.status || "N/A"}</p>
+  <p>DAILY TRADE STATUS.. {agentResult?.daily_qualification?.status || "N/A"}</p>
+  <p>TRADES TODAY........ {agentResult?.daily_qualification?.trades_today ?? "N/A"} / {agentResult?.daily_qualification?.target_trades_per_day ?? "N/A"}</p>
   <p>AGENT STATUS....... {autonomousMode ? "LIVE TRADING READY" : "STOPPED"}</p>
 </div>
 
@@ -984,11 +986,24 @@ async function loadTradeHistory() {
   </div>
 )}
 
+{agentResult?.daily_qualification && (
+  <div className="metrics strategy-library-box" style={{ marginTop: "24px" }}>
+    <p><strong>DAILY QUALIFICATION GUARD</strong></p>
+    <p>STATUS.............. {agentResult.daily_qualification.status || "N/A"}</p>
+    <p>TRADES TODAY........ {agentResult.daily_qualification.trades_today ?? "N/A"} / {agentResult.daily_qualification.target_trades_per_day ?? "N/A"}</p>
+    <p>FORCED WINDOW....... LAST {agentResult.daily_qualification.forced_window_minutes ?? "N/A"} MINUTES OF UTC DAY</p>
+    <p>MINUTES LEFT TODAY.. {agentResult.daily_qualification.minutes_until_utc_day_end ?? "N/A"}</p>
+    <p>FORCED TP TARGET.... +{agentResult.daily_qualification.take_profit_pct ?? "N/A"}%</p>
+    <p>FORCED MAX DOWNSIDE. -{agentResult.daily_qualification.stop_loss_pct ?? "N/A"}%</p>
+    <p>TIME EXIT BUFFER.... {agentResult.daily_qualification.time_exit_buffer_minutes ?? "N/A"} MINUTES BEFORE UTC DAY END</p>
+  </div>
+)}
+
 {agentResult?.why?.length > 0 && (
   <div className="metrics strategy-library-box" style={{ marginTop: "24px" }}>
     <p><strong>WHY THE AGENT DECIDED</strong></p>
     {agentResult.why.map((reason, index) => (
-      <p key={index}>✓ {reason}</p>
+      <p key={index}>- {reason}</p>
     ))}
   </div>
 )}
@@ -1078,11 +1093,17 @@ const isRealTrade =
   </p>
 )}
 
+{trade.daily_qualification && (
+  <p style={{ color: isRealTrade ? "#00ff41" : "#808080" }}>
+    DAILY QUALIFICATION: {trade.daily_qualification.trades_today} / {trade.daily_qualification.target_trades_per_day} — {trade.daily_qualification.status}
+  </p>
+)}
+
 {trade.why?.length > 0 && (
   <div style={{ color: isRealTrade ? "#00ff41" : "#808080", marginTop: "8px" }}>
     <p>WHY:</p>
     {trade.why.slice(0, 5).map((reason, reasonIndex) => (
-      <p key={reasonIndex}>✓ {reason}</p>
+      <p key={reasonIndex}>- {reason}</p>
     ))}
   </div>
 )}
