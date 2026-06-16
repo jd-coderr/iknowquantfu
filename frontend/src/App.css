@@ -191,7 +191,11 @@ label {
   white-space: nowrap;
 }
 
-.retro-quadrant-header span:last-child:not(:first-child) {
+.retro-quadrant-header > span:first-of-type {
+  color: #ffffff;
+}
+
+.retro-quadrant-header > span:nth-of-type(2) {
   color: #9cff8f;
   font-size: clamp(8px, 1.05vmin, 12px);
   letter-spacing: clamp(0px, 0.25vmin, 2px);
