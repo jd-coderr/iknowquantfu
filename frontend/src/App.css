@@ -1960,38 +1960,19 @@ h2 {
   transform: translateY(6px);
 }
 
-
-/* Full Size Version - added as a third option in the top-right menu */
-.full-size-page {
-  padding: clamp(8px, 1.3vmin, 18px);
-}
-
-.full-size-square {
-  width: min(96vw, 1540px);
-  height: min(94dvh, 980px);
-  max-width: 1540px;
-  max-height: 980px;
-}
-
-@media (max-width: 760px), (max-height: 720px) {
-  .full-size-square {
-    width: min(98vw, 98dvh);
-    height: min(98vw, 98dvh);
-  }
-}
-
-/* Full Size Version - single full-page terminal, no 4-square grid */
+/* Full Size Version - one long full-page terminal, sized to match the original pre-square version */
 .full-size-page {
   width: 100vw !important;
   height: 100dvh !important;
   display: block !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
-  padding: clamp(8px, 2vw, 20px) !important;
-  background:
-    radial-gradient(circle at center, rgba(37, 72, 37, 0.45) 0%, rgba(0, 0, 0, 0.95) 72%),
-    #000 !important;
-  color: #9cff8f;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #000 !important;
+  color: #00ff41;
+  font-family: "Courier New", monospace;
+  text-shadow: 0 0 6px #00ff41;
 }
 
 .full-terminal {
@@ -1999,15 +1980,14 @@ h2 {
   max-width: 1200px;
   min-height: 95vh;
   margin: 20px auto;
-  padding: clamp(14px, 2.2vw, 28px);
-  border: 3px double #9cff8f;
+  padding: 24px;
+  border: 3px double #00ff41;
   background: radial-gradient(circle at center, #031403 0%, #000 70%);
-  color: #9cff8f;
-  text-shadow: 0 0 6px rgba(156, 255, 143, 0.82);
-  box-shadow:
-    0 0 0 4px #020502,
-    0 0 30px rgba(156, 255, 143, 0.4),
-    inset 0 0 48px rgba(156, 255, 143, 0.08);
+  color: #00ff41;
+  font-size: 16px;
+  line-height: normal;
+  text-shadow: 0 0 6px #00ff41;
+  box-shadow: none;
 }
 
 .full-terminal .topbar,
@@ -2016,14 +1996,14 @@ h2 {
   justify-content: space-between;
   gap: 15px;
   flex-wrap: wrap;
-  border-bottom: 2px solid #9cff8f;
+  border-bottom: 2px solid #00ff41;
   padding-bottom: 12px;
   font-weight: bold;
-  font-size: clamp(11px, 1.25vw, 15px);
+  font-size: 16px;
 }
 
 .full-terminal .footer {
-  border-top: 2px solid #9cff8f;
+  border-top: 2px solid #00ff41;
   border-bottom: none;
   margin-top: 30px;
   padding-top: 12px;
@@ -2031,59 +2011,61 @@ h2 {
 
 .full-terminal .title {
   text-align: center;
-  color: #ffffff;
-  font-size: clamp(28px, 6vw, 52px);
-  margin: 40px 0 18px;
+  color: #00ff41;
+  font-size: clamp(28px, 6vw, 46px);
+  margin: 45px 0 18px;
   letter-spacing: clamp(3px, 1vw, 10px);
-  line-height: 1.05;
+  line-height: 1.1;
   word-break: break-word;
-  text-shadow:
-    0 0 4px #ffffff,
-    0 0 14px #9cff8f;
-}
-
-.full-terminal .subtitle,
-.full-terminal .full-slogan {
-  text-align: center;
-  margin: 0 0 22px;
-  letter-spacing: 2px;
-  font-weight: bold;
+  text-shadow: 0 0 6px #00ff41;
 }
 
 .full-terminal .subtitle {
-  font-size: clamp(14px, 2.4vw, 20px);
+  text-align: center;
+  font-size: clamp(14px, 3vw, 20px);
+  margin: 0 0 18px;
+  letter-spacing: 2px;
+  color: #00ff41;
 }
 
 .full-terminal .full-slogan {
-  color: #fff2bf;
-  font-size: clamp(12px, 1.7vw, 17px);
-  line-height: 1.55;
-  text-shadow: none;
+  text-align: center;
+  font-size: clamp(14px, 2.4vw, 18px);
+  margin: 0 0 40px;
+  letter-spacing: 2px;
+  line-height: 1.6;
+  font-weight: bold;
+  color: #ffffff;
+  text-shadow:
+    0 0 2px #ffffff,
+    0 0 4px #00ff41,
+    0 0 8px #00ff41;
 }
 
 .full-terminal .hero-description {
   max-width: 850px;
-  margin: 0 auto 60px;
+  margin: 0 auto 80px;
   padding: 14px 20px;
   text-align: center;
-  font-size: clamp(12px, 1.45vw, 15px);
+  font-size: 14px;
   line-height: 1.8;
   font-weight: bold;
-  background: #2a1a0f;
-  color: #fff2bf;
+  background: #b22222;
+  color: #ffffff;
   border: 2px solid #ffffff;
   text-shadow: none;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+  box-shadow:
+    0 0 10px rgba(255,255,255,0.5);
 }
 
 .full-terminal .panel {
-  border: 2px solid #9cff8f;
+  border: 2px solid #00ff41;
   padding: 42px 28px 30px;
   margin-bottom: 34px;
   position: relative;
   width: 100%;
   overflow: visible;
-  background: rgba(156, 255, 143, 0.025);
+  background: rgba(0, 255, 65, 0.025);
 }
 
 .full-terminal .panel-title {
@@ -2092,25 +2074,11 @@ h2 {
   left: 24px;
   background: #000;
   padding: 0 14px;
-  font-size: clamp(15px, 1.8vw, 20px);
+  font-size: 20px;
   line-height: 28px;
   font-weight: bold;
   z-index: 2;
-  color: #ffffff;
-}
-
-.full-terminal h2 {
-  color: #ffffff;
-  text-transform: uppercase;
-  font-size: clamp(18px, 2.4vw, 24px);
-  line-height: 1.3;
-  margin-top: 44px;
-  margin-bottom: 22px;
-  text-align: center;
-  letter-spacing: clamp(2px, 0.6vw, 6px);
-  text-shadow:
-    0 0 2px #ffffff,
-    0 0 8px #9cff8f;
+  color: #00ff41;
 }
 
 .full-terminal .input-row {
@@ -2121,11 +2089,16 @@ h2 {
   margin-top: 24px;
 }
 
+.full-terminal .input-row > div {
+  width: 100%;
+}
+
 .full-terminal label {
   display: block;
   margin-bottom: 10px;
   font-weight: bold;
   text-align: center;
+  font-size: 16px;
 }
 
 .full-terminal input,
@@ -2135,60 +2108,80 @@ h2 {
   width: 100%;
   max-width: 100%;
   background: rgba(0, 0, 0, 0.98);
-  color: #9cff8f;
-  border: 2px solid #9cff8f;
+  color: #00ff41;
+  border: 2px solid #00ff41;
   padding: 14px;
-  font-size: clamp(15px, 1.7vw, 18px);
-  text-shadow: 0 0 6px rgba(156, 255, 143, 0.82);
-  box-shadow: inset 0 0 10px rgba(156, 255, 143, 0.08);
+  font-family: "Courier New", monospace;
+  font-size: 18px;
+  text-shadow: 0 0 6px #00ff41;
+  box-shadow: none;
+}
+
+.full-terminal button {
+  cursor: pointer;
+  font-weight: bold;
 }
 
 .full-terminal button:hover,
 .full-terminal select:hover,
 .full-terminal summary:hover {
-  background: rgba(156, 255, 143, 0.22);
+  background: rgba(0, 255, 65, 0.5);
+  color: #00ff41;
+  text-shadow: 0 0 6px #00ff41;
+}
+
+.full-terminal button:disabled,
+.full-terminal input:disabled,
+.full-terminal select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.full-terminal select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-left: 20px;
+  padding-right: 65px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2300ff41' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 20px center;
+  background-size: 32px;
+}
+
+.full-terminal h2 {
   color: #ffffff;
-}
-
-.full-terminal .agent-control-panel,
-.full-terminal .button-row {
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto 36px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  align-items: stretch;
-}
-
-.full-terminal .agent-control-panel button,
-.full-terminal .button-row button,
-.full-terminal .copy-btn {
-  width: 100%;
-  max-width: none;
-  min-height: 58px;
-  margin: 0 !important;
-}
-
-.full-terminal .agent-control-panel select {
-  grid-column: 1 / -1;
-  justify-self: center;
-  width: min(420px, 100%) !important;
-  max-width: 420px !important;
+  font-family: "Courier New", monospace;
+  text-transform: uppercase;
+  font-size: 24px;
+  line-height: 32px;
+  margin-top: 55px;
+  margin-bottom: 22px;
+  text-align: center;
+  letter-spacing: 6px;
+  font-weight: bold;
+  text-shadow:
+    0 0 2px #ffffff,
+    0 0 4px #00ff41,
+    0 0 8px #00ff41;
 }
 
 .full-terminal .box,
 .full-terminal .reason,
-.full-terminal .metrics,
-.full-terminal .loading-box {
-  border: 2px solid #9cff8f;
-  padding: clamp(16px, 2.1vw, 28px);
+.full-terminal .metrics {
+  border: 2px solid #00ff41;
+  padding: 28px;
   min-height: 70px;
-  font-size: clamp(14px, 1.65vw, 18px);
+  font-size: 18px;
   width: 100%;
   overflow-wrap: break-word;
   word-break: break-word;
   background: rgba(0, 0, 0, 0.35);
+}
+
+.full-terminal .reason {
+  line-height: 1.6;
+  text-align: center;
 }
 
 .full-terminal .metrics p {
@@ -2203,34 +2196,274 @@ h2 {
   color: #ffffff;
 }
 
+.full-terminal .strategy-library-title {
+  margin-top: 36px !important;
+  margin-bottom: 36px !important;
+}
+
+.full-terminal .strategy-library-box,
+.full-terminal .execution-status-panel,
+.full-terminal .last-execution-panel {
+  margin-top: 32px !important;
+  margin-bottom: 36px !important;
+}
+
+.full-terminal .execution-status-panel p:first-child,
+.full-terminal .last-execution-panel p:first-child,
+.full-terminal .strategy-library-box p:first-child {
+  margin-top: 0 !important;
+  margin-bottom: 28px !important;
+}
+
+.full-terminal .agent-control-panel {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto 36px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.full-terminal .agent-control-panel button,
+.full-terminal .agent-control-panel select,
+.full-terminal .agent-control-panel .terminal-toggle,
+.full-terminal .agent-control-panel .copy-btn,
+.full-terminal .agent-control-panel .run-agent-btn,
+.full-terminal .agent-control-panel .autonomous-start-btn {
+  width: 100%;
+  max-width: none;
+  height: 58px;
+  margin: 0 !important;
+}
+
+.full-terminal .agent-control-panel select {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: 420px !important;
+  max-width: 420px !important;
+  text-align: left;
+  text-align-last: left;
+}
+
+.full-terminal .button-row {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto 36px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.full-terminal .button-row button {
+  width: 100%;
+  max-width: none;
+  height: 58px;
+  margin: 0 !important;
+}
+
+.full-terminal .copy-btn {
+  margin-top: 15px;
+  max-width: 420px;
+}
+
+.full-terminal .capital-input {
+  position: relative;
+}
+
+.full-terminal .capital-input span {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #00ff41;
+  font-weight: bold;
+  z-index: 2;
+}
+
+.full-terminal .capital-input input {
+  padding-left: 35px;
+}
+
+.full-terminal .autonomous-container {
+  margin-top: 48px !important;
+  margin-bottom: 36px;
+}
+
+.full-terminal .autonomous-status-box {
+  border: none !important;
+  padding: 0 !important;
+  margin: 48px 0 0 !important;
+}
+
+.full-terminal .autonomous-status-box p {
+  margin: 18px 0;
+}
+
+.full-terminal .agent-flow-visual {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  max-width: 560px;
+  margin: 18px auto 4px;
+  text-align: center;
+}
+
+.full-terminal .agent-flow-visual div {
+  border: 1px solid #00ff41;
+  padding: 12px 10px;
+  background: rgba(0, 255, 65, 0.055);
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+.full-terminal .agent-flow-visual span {
+  color: #ffffff;
+  text-shadow:
+    0 0 2px #ffffff,
+    0 0 6px #00ff41;
+  font-size: 22px;
+  line-height: 1;
+}
+
 .full-terminal .chart-box {
   width: 100%;
   height: 280px;
-  border: 1px solid #9cff8f;
+  border: 1px solid #00ff41;
   padding: 12px;
-  margin-bottom: 36px;
-  background: rgba(156, 255, 143, 0.04);
+  margin-bottom: 28px;
+  background: rgba(0, 255, 65, 0.04);
 }
 
 .full-terminal .trade-table,
 .full-terminal .optimizer-table {
   width: 100%;
-  border: 2px solid #9cff8f;
-  margin: 14px 0 40px;
+  border: 2px solid #00ff41;
+  margin: 22px 0 40px;
   overflow-x: auto;
 }
 
-.full-terminal .trade-row,
-.full-terminal .optimizer-row {
-  border-bottom: 1px solid rgba(156, 255, 143, 0.7);
+.full-terminal .trade-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1.4fr 1fr 1fr 1fr 0.8fr 1fr;
+  border-bottom: 1px solid #00ff41;
 }
 
-.full-terminal .trade-row span,
+.full-terminal .trade-row:last-child,
+.full-terminal .optimizer-row:last-child {
+  border-bottom: none;
+}
+
+.full-terminal .trade-row span {
+  padding: 14px 8px;
+  border-right: 1px solid #00ff41;
+  overflow-wrap: anywhere;
+  text-align: center;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(11px, 1.5vw, 16px);
+}
+
+.full-terminal .trade-row span:last-child,
+.full-terminal .optimizer-row span:last-child {
+  border-right: none;
+}
+
+.full-terminal .trade-header,
+.full-terminal .optimizer-header {
+  font-weight: bold;
+  background: rgba(0, 255, 65, 0.12);
+}
+
+.full-terminal .trade-win {
+  color: #00ff41;
+}
+
+.full-terminal .trade-loss {
+  color: #ff4040;
+  text-shadow: 0 0 6px #ff4040;
+}
+
+.full-terminal .optimizer-row {
+  display: grid;
+  grid-template-columns: 0.6fr 0.8fr 0.8fr 2.4fr 0.8fr 0.8fr 0.8fr 0.7fr 0.8fr 0.8fr;
+  border-bottom: 1px solid #00ff41;
+}
+
 .full-terminal .optimizer-row span {
-  padding: 10px 6px;
-  border-right: 1px solid rgba(156, 255, 143, 0.65);
-  min-height: 48px;
-  font-size: clamp(10px, 1.2vw, 14px);
+  padding: 8px 3px;
+  border-right: 1px solid #00ff41;
+  text-align: center;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.full-terminal .loading-panel {
+  animation: terminalPulse 1.6s infinite;
+}
+
+.full-terminal .loading-box {
+  border: 2px solid #00ff41;
+  padding: 28px;
+  font-size: 18px;
+  line-height: 1.6;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.full-terminal .loading-line {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  margin: 12px 0;
+}
+
+.full-terminal .loading-text {
+  display: inline-block;
+}
+
+.full-terminal .loading-dots {
+  display: inline-flex;
+  width: 32px;
+  height: 1em;
+  align-items: center;
+  justify-content: flex-start;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.full-terminal .progress-bar {
+  width: 100%;
+  height: 24px;
+  margin-top: 28px;
+  border: 2px solid #00ff41;
+  overflow: hidden;
+}
+
+.full-terminal .progress-fill {
+  height: 100%;
+  width: 35%;
+  background: rgba(0, 255, 65, 0.55);
+  animation: progressScan 8s infinite linear;
+}
+
+.full-terminal textarea {
+  height: 420px;
+  margin-top: 10px;
+  resize: vertical;
+  line-height: 1.4;
+  overflow-x: hidden;
+  white-space: pre-wrap;
 }
 
 .full-terminal details {
@@ -2239,9 +2472,13 @@ h2 {
   background: transparent;
 }
 
+.full-terminal details[open] {
+  margin: 18px 0;
+}
+
 .full-terminal details summary {
   color: #ffffff;
-  font-size: clamp(13px, 1.4vw, 16px);
+  font-size: 0.9rem;
   font-weight: 700;
   cursor: pointer;
   margin: 0;
@@ -2251,33 +2488,119 @@ h2 {
   border-bottom: none;
 }
 
-.full-terminal details summary::before {
-  content: "[+] ";
-  color: #9cff8f;
-}
-
-.full-terminal details[open] > summary::before {
-  content: "[-] ";
-  color: #ffffff;
-}
-
 .full-terminal details > *:not(summary) {
   margin-top: 18px;
+}
+
+.full-terminal details summary::-webkit-details-marker {
+  display: none;
+}
+
+.full-terminal details summary::before {
+  content: "▶";
+  display: inline-block;
+  width: 20px;
+  margin-right: 10px;
+  transition: transform 0.2s ease;
+  color: #ffffff;
+  text-shadow:
+    0 0 2px #ffffff,
+    0 0 4px #00ff41,
+    0 0 8px #00ff41;
+}
+
+.full-terminal details[open] summary::before {
+  content: "▼";
+}
+
+.full-terminal .table-scroll-hint {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  margin: 16px 0 8px;
+  padding: 8px 12px;
+  border: 1px dashed #00ff41;
+  color: #00ff41;
+  background: rgba(0, 255, 65, 0.04);
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.full-terminal .table-scroll-hint span:first-child,
+.full-terminal .table-scroll-hint span:last-child {
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.full-terminal .retro-log-entry {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(0,255,65,0.25);
 }
 
 .full-terminal .retro-log-entry,
 .full-terminal .retro-log-entry p,
 .full-terminal .retro-log-entry div {
-  color: #9cff8f;
+  color: #00ff41;
+}
+
+
+
+/* Full Size Version readability fix: override tiny square-layout text leaks */
+.full-terminal label,
+.full-terminal .agent-control-panel label {
+  font-size: 18px !important;
+  line-height: 1.35 !important;
+  letter-spacing: 1px !important;
+  text-shadow: 0 0 6px #00ff41 !important;
+}
+
+.full-terminal .autonomous-status-box,
+.full-terminal .autonomous-status-box p {
+  font-size: 18px !important;
+  line-height: 1.55 !important;
+  letter-spacing: 1px !important;
+  text-align: center !important;
+  color: #00ff41 !important;
+}
+
+.full-terminal .agent-flow-visual {
+  max-width: 560px !important;
+  gap: 10px !important;
+}
+
+.full-terminal .agent-flow-visual div {
+  min-height: 46px !important;
+  padding: 12px 10px !important;
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+  letter-spacing: 2px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.full-terminal .agent-flow-visual span {
+  font-size: 24px !important;
+  line-height: 1.1 !important;
+}
+
+.full-terminal .strategy-library-box > p:first-child,
+.full-terminal .strategy-library-box > p:first-child strong,
+.full-terminal .execution-status-panel > p:first-child,
+.full-terminal .execution-status-panel > p:first-child strong,
+.full-terminal .last-execution-panel > p:first-child,
+.full-terminal .last-execution-panel > p:first-child strong {
+  font-size: 20px !important;
+  line-height: 1.35 !important;
+  letter-spacing: 1px !important;
 }
 
 @media (max-width: 768px) {
-  .full-size-page {
-    padding: 8px !important;
-  }
-
   .full-terminal {
-    width: calc(100% - 8px);
+    width: calc(100% - 16px);
     margin: 8px auto;
     padding: 10px;
   }
@@ -2286,10 +2609,17 @@ h2 {
     padding: 34px 12px 18px;
   }
 
-  .full-terminal .agent-control-panel,
-  .full-terminal .button-row {
-    grid-template-columns: 1fr;
-    gap: 18px;
+  .full-terminal .metrics,
+  .full-terminal .reason {
+    padding: 16px;
+    font-size: 14px;
+  }
+
+  .full-terminal input,
+  .full-terminal select,
+  .full-terminal textarea,
+  .full-terminal button {
+    font-size: 16px;
   }
 
   .full-terminal .chart-box {
@@ -2297,8 +2627,40 @@ h2 {
     padding: 6px;
   }
 
+  .full-terminal .optimizer-table,
+  .full-terminal .trade-table {
+    overflow-x: auto;
+  }
+
   .full-terminal .optimizer-row,
   .full-terminal .trade-row {
     min-width: 760px;
   }
+
+  .full-terminal h1,
+  .full-terminal h2,
+  .full-terminal .title {
+    font-size: 18px;
+    letter-spacing: 3px;
+  }
+
+  .full-terminal button {
+    width: 100%;
+  }
+
+  .full-terminal .agent-control-panel {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .full-terminal .button-row {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .full-terminal .agent-control-panel select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
 }
+
