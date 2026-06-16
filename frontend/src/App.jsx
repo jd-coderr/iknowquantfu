@@ -1624,11 +1624,17 @@ async function loadTradeHistory() {
             </details>
 
             <details className="retro-window trade-log-window" open>
-              <summary>TRADE LOG / LIVE AGENT ACTIVITY</summary>
+              <summary>TRADING LOGS / LIVE AGENT ACTIVITY</summary>
               <div className="metrics trade-log-panel">
-                <button onClick={() => setShowOnlyRealTrades(!showOnlyRealTrades)} className="copy-btn" style={{ marginBottom: "14px" }}>
-                  {showOnlyRealTrades ? "> SHOW ALL AGENT ACTIVITY <" : "> SHOW REAL TRADES ONLY <"}
-                </button>
+                <div className="trade-log-controls">
+                  <button onClick={loadTradeHistory} className="copy-btn">
+                    {"> REFRESH TRADE LOGS <"}
+                  </button>
+
+                  <button onClick={() => setShowOnlyRealTrades(!showOnlyRealTrades)} className="copy-btn">
+                    {showOnlyRealTrades ? "> SHOW ALL AGENT ACTIVITY <" : "> SHOW REAL TRADES ONLY <"}
+                  </button>
+                </div>
 
                 {tradeHistory.length === 0 && (
                   <p className="trade-log-empty">NO TRADE LOGS LOADED YET. RUN THE AGENT OR LOAD TRADE HISTORY TO SHOW EXECUTION ACTIVITY HERE.</p>
@@ -1720,6 +1726,38 @@ async function loadTradeHistory() {
                         </div>
                       );
                     })}
+              </div>
+            </details>
+
+            <details className="retro-window trade-history-window" open>
+              <summary>TRADING HISTORY / STRATEGY BACKTEST HISTORY</summary>
+              <div className="metrics">
+                {!result && (
+                  <p className="trade-log-empty">NO STRATEGY BACKTEST HISTORY LOADED YET. RUN AUTO-OPTIMIZE OR GENERATE STRATEGY TO FILL THIS TABLE.</p>
+                )}
+
+                {result && (!result.backtest?.recent_trades || result.backtest.recent_trades.length === 0) && (
+                  <p className="trade-log-empty">STRATEGY LOADED, BUT NO RECENT BACKTEST TRADES WERE RETURNED.</p>
+                )}
+
+                {result?.backtest?.recent_trades?.length > 0 && (
+                  <div className="trade-table">
+                    <div className="trade-row trade-header">
+                      <span>ENTRY TIME</span><span>EXIT TIME</span><span>ENTRY</span><span>EXIT</span><span>RESULT</span><span>PNL</span><span>DURATION</span>
+                    </div>
+                    {result.backtest.recent_trades.map((trade, index) => (
+                      <div className="trade-row" key={index}>
+                        <span>{trade.entry_time}</span>
+                        <span>{trade.exit_time}</span>
+                        <span>{trade.entry_price}</span>
+                        <span>{trade.exit_price}</span>
+                        <span className={trade.result === "win" ? "trade-win" : "trade-loss"}>{String(trade.result || "N/A").toUpperCase()}</span>
+                        <span>{trade.pnl_pct}%</span>
+                        <span>{trade.duration}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </details>
 
@@ -1962,25 +2000,7 @@ async function loadTradeHistory() {
                   </div>
                 </details>
 
-                <details className="retro-sub-window">
-                  <summary>STRATEGY BACKTEST HISTORY</summary>
-                  <div className="trade-table">
-                    <div className="trade-row trade-header">
-                      <span>ENTRY TIME</span><span>EXIT TIME</span><span>ENTRY</span><span>EXIT</span><span>RESULT</span><span>PNL</span><span>DURATION</span>
-                    </div>
-                    {result.backtest.recent_trades && result.backtest.recent_trades.map((trade, index) => (
-                      <div className="trade-row" key={index}>
-                        <span>{trade.entry_time}</span>
-                        <span>{trade.exit_time}</span>
-                        <span>{trade.entry_price}</span>
-                        <span>{trade.exit_price}</span>
-                        <span className={trade.result === "win" ? "trade-win" : "trade-loss"}>{trade.result.toUpperCase()}</span>
-                        <span>{trade.pnl_pct}%</span>
-                        <span>{trade.duration}</span>
-                      </div>
-                    ))}
-                  </div>
-                </details>
+
 
                 <details className="retro-sub-window">
                   <summary>METRICS / AGENT LOGIC EXPLAINED</summary>

@@ -1837,3 +1837,31 @@ h2 {
   margin: 0;
   text-align: center;
 }
+
+
+/* Trade log and trade history visibility */
+.trade-log-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(6px, 1vmin, 12px);
+  margin-bottom: 14px;
+}
+
+.trade-log-empty {
+  color: #fff2bf;
+  text-align: center;
+  border: 1px dashed rgba(255, 242, 191, 0.65);
+  padding: 8px;
+  text-shadow: none;
+}
+
+.trade-history-window .trade-table,
+.trade-log-window .trade-table {
+  margin-top: 10px;
+}
+
+@media (max-width: 680px), (max-height: 680px) {
+  .trade-log-controls {
+    grid-template-columns: 1fr;
+  }
+}
