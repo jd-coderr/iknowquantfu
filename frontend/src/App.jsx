@@ -1907,15 +1907,39 @@ async function loadTradeHistory() {
                     <summary>EQUITY CURVE</summary>
                     <div className="chart-box">
                       <ResponsiveContainer width="100%" height={260}>
-                        <LineChart data={getEquityCurveData()} margin={{ top: 10, right: 20, left: 10, bottom: 50 }}>
-                          <XAxis dataKey="trade" label={{ value: "TRADES", position: "insideBottom", offset: -15 }} />
-                          <YAxis domain={["auto", "auto"]} />
+                        <LineChart data={getEquityCurveData()} margin={{ top: 8, right: 16, left: 4, bottom: 28 }}>
+                          <XAxis
+                            dataKey="trade"
+                            tick={{ fontSize: 8, fill: "#9cff8f" }}
+                            tickLine={{ stroke: "#9cff8f" }}
+                            axisLine={{ stroke: "#9cff8f" }}
+                            label={{
+                              value: "TRADES",
+                              position: "insideBottom",
+                              offset: -4,
+                              style: { fontSize: 9, fill: "#9cff8f", letterSpacing: 1 }
+                            }}
+                          />
+                          <YAxis
+                            domain={["auto", "auto"]}
+                            width={44}
+                            tick={{ fontSize: 8, fill: "#9cff8f" }}
+                            tickLine={{ stroke: "#9cff8f" }}
+                            axisLine={{ stroke: "#9cff8f" }}
+                          />
                           <Tooltip
                             labelFormatter={(label) => `Trade ${label}`}
                             formatter={(value) => [`$${Number(value).toFixed(2)}`, "Equity"]}
-                            contentStyle={{ backgroundColor: "#001a08", border: "1px solid #00ff41", color: "#00ff41" }}
-                            labelStyle={{ color: "#00ff41" }}
-                            itemStyle={{ color: "#00ff41" }}
+                            contentStyle={{
+                              backgroundColor: "#001a08",
+                              border: "1px solid #00ff41",
+                              color: "#00ff41",
+                              fontSize: "8px",
+                              lineHeight: "1.25",
+                              padding: "4px 6px"
+                            }}
+                            labelStyle={{ color: "#00ff41", fontSize: "8px", marginBottom: "2px" }}
+                            itemStyle={{ color: "#00ff41", fontSize: "8px", padding: 0 }}
                           />
                           <Line type="monotone" dataKey="equity" dot={false} stroke="#ffffff" strokeWidth={2} />
                         </LineChart>
