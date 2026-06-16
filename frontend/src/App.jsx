@@ -46,6 +46,7 @@ function App() {
   const [viewMode, setViewMode] = useState("simple");
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
   const [expandedSimpleQuadrant, setExpandedSimpleQuadrant] = useState(null);
+  const [expandedDetailedQuadrant, setExpandedDetailedQuadrant] = useState(null);
 
   function formatMoney(value) {
     if (value === null || value === undefined || isNaN(value)) return "N/A";
@@ -891,6 +892,7 @@ async function loadTradeHistory() {
               className={viewMode === "simple" ? "version-menu-option active" : "version-menu-option"}
               onClick={() => {
                 setViewMode("simple");
+                setExpandedDetailedQuadrant(null);
                 setOptionsMenuOpen(false);
               }}
             >
@@ -901,6 +903,7 @@ async function loadTradeHistory() {
               className={viewMode === "detailed" ? "version-menu-option active" : "version-menu-option"}
               onClick={() => {
                 setViewMode("detailed");
+                setExpandedSimpleQuadrant(null);
                 setOptionsMenuOpen(false);
               }}
             >
@@ -928,6 +931,28 @@ async function loadTradeHistory() {
         className="simple-expand-button"
         aria-label={isExpanded ? "Collapse section" : "Expand section"}
         onClick={() => setExpandedSimpleQuadrant(isExpanded ? null : name)}
+      >
+        {isExpanded ? "−" : "+"}
+      </button>
+    );
+  }
+
+  function getDetailedQuadrantClass(name, baseClass) {
+    const isExpanded = expandedDetailedQuadrant === name;
+    const isHidden = expandedDetailedQuadrant && !isExpanded;
+
+    return `${baseClass} ${isExpanded ? "retro-expanded" : ""} ${isHidden ? "retro-hidden-behind-expanded" : ""}`;
+  }
+
+  function renderDetailedExpandButton(name) {
+    const isExpanded = expandedDetailedQuadrant === name;
+
+    return (
+      <button
+        type="button"
+        className="retro-expand-button"
+        aria-label={isExpanded ? "Collapse section" : "Expand section"}
+        onClick={() => setExpandedDetailedQuadrant(isExpanded ? null : name)}
       >
         {isExpanded ? "−" : "+"}
       </button>
@@ -1171,11 +1196,12 @@ async function loadTradeHistory() {
 
   const renderDetailedVersion = () => (
     <div className="retro-page">
-      <div className="retro-square">
-        <section className="retro-quadrant retro-who">
+      <div className={`retro-square ${expandedDetailedQuadrant ? "retro-has-expanded" : ""}`}>
+        <section className={getDetailedQuadrantClass("who", "retro-quadrant retro-who")}>
           <div className="retro-quadrant-header">
             <span>WHO AM I?</span>
             <span>SF v0.1.0</span>
+            {renderDetailedExpandButton("who")}
           </div>
 
           <div className="retro-quadrant-body">
@@ -1241,9 +1267,10 @@ async function loadTradeHistory() {
           </div>
         </section>
 
-        <section className="retro-quadrant retro-what">
+        <section className={getDetailedQuadrantClass("what", "retro-quadrant retro-what")}>
           <div className="retro-quadrant-header">
             <span>WHAT DO I DO?</span>
+            {renderDetailedExpandButton("what")}
           </div>
 
           <div className="retro-quadrant-body">
@@ -1385,10 +1412,11 @@ async function loadTradeHistory() {
           </div>
         </section>
 
-        <section className="retro-quadrant retro-when">
+        <section className={getDetailedQuadrantClass("when", "retro-quadrant retro-when")}>
           <div className="retro-quadrant-header">
             <span>WHEN?</span>
             <span>OPERATOR FLOW</span>
+            {renderDetailedExpandButton("when")}
           </div>
 
           <div className="retro-quadrant-body">
@@ -1562,9 +1590,10 @@ async function loadTradeHistory() {
           </div>
         </section>
 
-        <section className="retro-quadrant retro-how">
+        <section className={getDetailedQuadrantClass("how", "retro-quadrant retro-how")}>
           <div className="retro-quadrant-header">
             <span>HOW? LOGIC + PROOF</span>
+            {renderDetailedExpandButton("how")}
           </div>
 
           <div className="retro-quadrant-body">
