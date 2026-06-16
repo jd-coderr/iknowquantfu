@@ -1979,3 +1979,326 @@ h2 {
     height: min(98vw, 98dvh);
   }
 }
+
+/* Full Size Version - single full-page terminal, no 4-square grid */
+.full-size-page {
+  width: 100vw !important;
+  height: 100dvh !important;
+  display: block !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: clamp(8px, 2vw, 20px) !important;
+  background:
+    radial-gradient(circle at center, rgba(37, 72, 37, 0.45) 0%, rgba(0, 0, 0, 0.95) 72%),
+    #000 !important;
+  color: #9cff8f;
+}
+
+.full-terminal {
+  width: calc(100% - 40px);
+  max-width: 1200px;
+  min-height: 95vh;
+  margin: 20px auto;
+  padding: clamp(14px, 2.2vw, 28px);
+  border: 3px double #9cff8f;
+  background: radial-gradient(circle at center, #031403 0%, #000 70%);
+  color: #9cff8f;
+  text-shadow: 0 0 6px rgba(156, 255, 143, 0.82);
+  box-shadow:
+    0 0 0 4px #020502,
+    0 0 30px rgba(156, 255, 143, 0.4),
+    inset 0 0 48px rgba(156, 255, 143, 0.08);
+}
+
+.full-terminal .topbar,
+.full-terminal .footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid #9cff8f;
+  padding-bottom: 12px;
+  font-weight: bold;
+  font-size: clamp(11px, 1.25vw, 15px);
+}
+
+.full-terminal .footer {
+  border-top: 2px solid #9cff8f;
+  border-bottom: none;
+  margin-top: 30px;
+  padding-top: 12px;
+}
+
+.full-terminal .title {
+  text-align: center;
+  color: #ffffff;
+  font-size: clamp(28px, 6vw, 52px);
+  margin: 40px 0 18px;
+  letter-spacing: clamp(3px, 1vw, 10px);
+  line-height: 1.05;
+  word-break: break-word;
+  text-shadow:
+    0 0 4px #ffffff,
+    0 0 14px #9cff8f;
+}
+
+.full-terminal .subtitle,
+.full-terminal .full-slogan {
+  text-align: center;
+  margin: 0 0 22px;
+  letter-spacing: 2px;
+  font-weight: bold;
+}
+
+.full-terminal .subtitle {
+  font-size: clamp(14px, 2.4vw, 20px);
+}
+
+.full-terminal .full-slogan {
+  color: #fff2bf;
+  font-size: clamp(12px, 1.7vw, 17px);
+  line-height: 1.55;
+  text-shadow: none;
+}
+
+.full-terminal .hero-description {
+  max-width: 850px;
+  margin: 0 auto 60px;
+  padding: 14px 20px;
+  text-align: center;
+  font-size: clamp(12px, 1.45vw, 15px);
+  line-height: 1.8;
+  font-weight: bold;
+  background: #2a1a0f;
+  color: #fff2bf;
+  border: 2px solid #ffffff;
+  text-shadow: none;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+}
+
+.full-terminal .panel {
+  border: 2px solid #9cff8f;
+  padding: 42px 28px 30px;
+  margin-bottom: 34px;
+  position: relative;
+  width: 100%;
+  overflow: visible;
+  background: rgba(156, 255, 143, 0.025);
+}
+
+.full-terminal .panel-title {
+  position: absolute;
+  top: -16px;
+  left: 24px;
+  background: #000;
+  padding: 0 14px;
+  font-size: clamp(15px, 1.8vw, 20px);
+  line-height: 28px;
+  font-weight: bold;
+  z-index: 2;
+  color: #ffffff;
+}
+
+.full-terminal h2 {
+  color: #ffffff;
+  text-transform: uppercase;
+  font-size: clamp(18px, 2.4vw, 24px);
+  line-height: 1.3;
+  margin-top: 44px;
+  margin-bottom: 22px;
+  text-align: center;
+  letter-spacing: clamp(2px, 0.6vw, 6px);
+  text-shadow:
+    0 0 2px #ffffff,
+    0 0 8px #9cff8f;
+}
+
+.full-terminal .input-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px;
+  align-items: stretch;
+  margin-top: 24px;
+}
+
+.full-terminal label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.full-terminal input,
+.full-terminal select,
+.full-terminal textarea,
+.full-terminal button {
+  width: 100%;
+  max-width: 100%;
+  background: rgba(0, 0, 0, 0.98);
+  color: #9cff8f;
+  border: 2px solid #9cff8f;
+  padding: 14px;
+  font-size: clamp(15px, 1.7vw, 18px);
+  text-shadow: 0 0 6px rgba(156, 255, 143, 0.82);
+  box-shadow: inset 0 0 10px rgba(156, 255, 143, 0.08);
+}
+
+.full-terminal button:hover,
+.full-terminal select:hover,
+.full-terminal summary:hover {
+  background: rgba(156, 255, 143, 0.22);
+  color: #ffffff;
+}
+
+.full-terminal .agent-control-panel,
+.full-terminal .button-row {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto 36px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.full-terminal .agent-control-panel button,
+.full-terminal .button-row button,
+.full-terminal .copy-btn {
+  width: 100%;
+  max-width: none;
+  min-height: 58px;
+  margin: 0 !important;
+}
+
+.full-terminal .agent-control-panel select {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(420px, 100%) !important;
+  max-width: 420px !important;
+}
+
+.full-terminal .box,
+.full-terminal .reason,
+.full-terminal .metrics,
+.full-terminal .loading-box {
+  border: 2px solid #9cff8f;
+  padding: clamp(16px, 2.1vw, 28px);
+  min-height: 70px;
+  font-size: clamp(14px, 1.65vw, 18px);
+  width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.full-terminal .metrics p {
+  margin: 10px 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+
+.full-terminal .metrics strong,
+.full-terminal .reason strong {
+  color: #ffffff;
+}
+
+.full-terminal .chart-box {
+  width: 100%;
+  height: 280px;
+  border: 1px solid #9cff8f;
+  padding: 12px;
+  margin-bottom: 36px;
+  background: rgba(156, 255, 143, 0.04);
+}
+
+.full-terminal .trade-table,
+.full-terminal .optimizer-table {
+  width: 100%;
+  border: 2px solid #9cff8f;
+  margin: 14px 0 40px;
+  overflow-x: auto;
+}
+
+.full-terminal .trade-row,
+.full-terminal .optimizer-row {
+  border-bottom: 1px solid rgba(156, 255, 143, 0.7);
+}
+
+.full-terminal .trade-row span,
+.full-terminal .optimizer-row span {
+  padding: 10px 6px;
+  border-right: 1px solid rgba(156, 255, 143, 0.65);
+  min-height: 48px;
+  font-size: clamp(10px, 1.2vw, 14px);
+}
+
+.full-terminal details {
+  margin: 18px 0;
+  border: none;
+  background: transparent;
+}
+
+.full-terminal details summary {
+  color: #ffffff;
+  font-size: clamp(13px, 1.4vw, 16px);
+  font-weight: 700;
+  cursor: pointer;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  background: transparent;
+  border-bottom: none;
+}
+
+.full-terminal details summary::before {
+  content: "[+] ";
+  color: #9cff8f;
+}
+
+.full-terminal details[open] > summary::before {
+  content: "[-] ";
+  color: #ffffff;
+}
+
+.full-terminal details > *:not(summary) {
+  margin-top: 18px;
+}
+
+.full-terminal .retro-log-entry,
+.full-terminal .retro-log-entry p,
+.full-terminal .retro-log-entry div {
+  color: #9cff8f;
+}
+
+@media (max-width: 768px) {
+  .full-size-page {
+    padding: 8px !important;
+  }
+
+  .full-terminal {
+    width: calc(100% - 8px);
+    margin: 8px auto;
+    padding: 10px;
+  }
+
+  .full-terminal .panel {
+    padding: 34px 12px 18px;
+  }
+
+  .full-terminal .agent-control-panel,
+  .full-terminal .button-row {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .full-terminal .chart-box {
+    height: 240px;
+    padding: 6px;
+  }
+
+  .full-terminal .optimizer-row,
+  .full-terminal .trade-row {
+    min-width: 760px;
+  }
+}
