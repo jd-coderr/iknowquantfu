@@ -244,6 +244,53 @@ def is_backtest_eligible(backtest):
     )
 
 
+def metric_to_float(value, default=0.0):
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    if value is None:
+        return default
+
+    cleaned = (
+        str(value)
+        .replace("%", "")
+        .replace("$", "")
+        .replace(",", "")
+        .replace("days", "")
+        .replace("day", "")
+        .replace("hours", "")
+        .replace("hour", "")
+        .replace("trades", "")
+        .replace("trade", "")
+        .strip()
+    )
+
+    try:
+        return float(cleaned)
+    except (TypeError, ValueError):
+        return default
+
+
+def frequency_ranking_key(item):
+    backtest = item.get("backtest", {})
+    win_rate = metric_to_float(backtest.get("win_rate"), 0.0)
+    profit_factor = metric_to_float(backtest.get("profit_factor"), 0.0)
+    max_drawdown = metric_to_float(backtest.get("max_drawdown"), 999.0)
+    signals_per_day = metric_to_float(
+        backtest.get("signals_per_day_value", backtest.get("signals_per_day")),
+        0.0,
+    )
+
+    win_rate_floor_pass = win_rate >= 30.0
+
+    return (
+        win_rate_floor_pass,
+        profit_factor,
+        -max_drawdown,
+        signals_per_day,
+    )
+
+
 def pick_best_strategy(
     coin: str,
     timeframe: str,
@@ -938,7 +985,7 @@ def generate_strategy(request: StrategyRequest):
 
 @app.post("/optimize-strategy")
 def optimize_strategy(request: OptimizeRequest):
-    timeframes = ["1M", "5M", "15M", "1H", "4H", "1D"]
+    timeframes = ["5M", "15M", "1H", "4H", "1D"]
     risk_levels = ["low", "medium", "high"]
     strategies = load_available_strategies()
 
@@ -995,6 +1042,12 @@ def optimize_strategy(request: OptimizeRequest):
 
     best_result = max(ranking_pool, key=lambda item: item["risk_adjusted_score"])
 
+    frequency_ranked_results = sorted(
+        results,
+        key=frequency_ranking_key,
+        reverse=True,
+    )
+
     return {
         "coin": request.coin,
         "mode": "auto_optimization",
@@ -1003,6 +1056,7 @@ def optimize_strategy(request: OptimizeRequest):
         "eligible_combinations": len(eligible_results),
         "best_setup": best_result,
         "all_results": results,
+        "frequency_ranked_results": frequency_ranked_results,
     }
 
 
