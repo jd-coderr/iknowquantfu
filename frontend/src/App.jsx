@@ -35,6 +35,14 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState("");
   const [activeButton, setActiveButton] = useState("");
+  const [operatorKey, setOperatorKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.sessionStorage.getItem("ikqf_operator_key") || "";
+  });
+  const [operatorUnlocked, setOperatorUnlocked] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem("ikqf_operator_unlocked") === "true";
+  });
   const [autoOptimized, setAutoOptimized] = useState(false);
   const [agentStopConfirmed, setAgentStopConfirmed] = useState(false);
   const [walletAddress, setWalletAddress] = useState(null);
@@ -194,6 +202,86 @@ function App() {
     }, 900);
   }
 
+  function getOperatorHeaders(baseHeaders = {}) {
+    return operatorKey
+      ? {
+          ...baseHeaders,
+          "X-IKQF-ADMIN-KEY": operatorKey,
+        }
+      : baseHeaders;
+  }
+
+  function lockOperatorMode() {
+    setOperatorUnlocked(false);
+    setOperatorKey("");
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("ikqf_operator_key");
+      window.sessionStorage.removeItem("ikqf_operator_unlocked");
+    }
+  }
+
+  function requireOperatorMode(actionLabel = "THIS ACTION") {
+    if (!operatorUnlocked || !operatorKey.trim()) {
+      alert(`${actionLabel} IS LOCKED. OPEN THE OPTIONS MENU AND UNLOCK OPERATOR MODE FIRST.`);
+      return false;
+    }
+
+    return true;
+  }
+
+  async function unlockOperatorMode() {
+    const key = operatorKey.trim();
+
+    if (!key) {
+      alert("ENTER OPERATOR PASSWORD FIRST");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/operator/unlock`, {
+        method: "POST",
+        headers: {
+          "X-IKQF-ADMIN-KEY": key,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Operator unlock rejected");
+      }
+
+      setOperatorUnlocked(true);
+
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("ikqf_operator_key", key);
+        window.sessionStorage.setItem("ikqf_operator_unlocked", "true");
+      }
+
+      alert("OPERATOR MODE UNLOCKED FOR THIS BROWSER SESSION");
+    } catch (error) {
+      console.error(error);
+      lockOperatorMode();
+      alert("OPERATOR PASSWORD WRONG OR BACKEND ADMIN KEY NOT CONFIGURED");
+    }
+  }
+
+  async function handleLockedResponse(response) {
+    if (response.status === 401 || response.status === 403) {
+      lockOperatorMode();
+      alert("OPERATOR MODE LOCKED. ENTER THE PASSWORD AGAIN.");
+      return true;
+    }
+
+    if (response.status === 500) {
+      const data = await response.json().catch(() => null);
+      const message = data?.detail || "BACKEND ADMIN KEY IS NOT CONFIGURED";
+      alert(message);
+      return true;
+    }
+
+    return false;
+  }
+
   function isApproved() {
   return (
     result?.backtest?.drawdown_gate === "PASS" &&
@@ -202,15 +290,17 @@ function App() {
 }
 
 async function startAutonomousMode() {
+  if (!requireOperatorMode("START AGENT")) return;
+
   pulseButton("run");
   focusAgentActivitySections();
 
   try {
     const response = await fetch(`${API_BASE}/autonomous/start`, {
       method: "POST",
-      headers: {
+      headers: getOperatorHeaders({
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({
         coin,
         timeframe,
@@ -224,6 +314,8 @@ async function startAutonomousMode() {
       }),
     });
 
+    if (await handleLockedResponse(response)) return;
+
     const data = await response.json();
     setAutonomousStatus(data);
     setAutonomousMode(true);
@@ -235,12 +327,17 @@ async function startAutonomousMode() {
 }
 
 async function stopAutonomousMode() {
+  if (!requireOperatorMode("STOP AGENT")) return;
+
   pulseButton("stop");
 
   try {
     const response = await fetch(`${API_BASE}/autonomous/stop`, {
       method: "POST",
+      headers: getOperatorHeaders(),
     });
+
+    if (await handleLockedResponse(response)) return;
 
     const data = await response.json();
     setAutonomousStatus(data);
@@ -771,15 +868,17 @@ Best eligible risk-adjusted score among all tested combinations.
   }
 
 async function runAgentCycle() {
+  if (!requireOperatorMode("RUN AGENT")) return;
+
   pulseButton("run");
   focusAgentActivitySections();
 
   try {
     const response = await fetch(`${API_BASE}/agent-cycle`, {
       method: "POST",
-      headers: {
+      headers: getOperatorHeaders({
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({
         coin,
         timeframe,
@@ -790,6 +889,8 @@ async function runAgentCycle() {
         selected_strategy: result?.selected_strategy || null,
       }),
     });
+
+    if (await handleLockedResponse(response)) return;
 
     const data = await response.json();
     setAgentResult(data);
@@ -882,18 +983,22 @@ async function loadPaperPortfolio() {
 }
 
 async function resetPaperPortfolio() {
+  if (!requireOperatorMode("RESET PAPER PORTFOLIO")) return;
+
   pulseButton("resetPaper");
 
   try {
     const response = await fetch(`${API_BASE}/paper-portfolio/reset`, {
       method: "POST",
-      headers: {
+      headers: getOperatorHeaders({
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({
         starting_balance_usdt: paperStartingBalance,
       }),
     });
+
+    if (await handleLockedResponse(response)) return;
 
     const data = await response.json();
     setPaperPortfolio(data.paper_portfolio || null);
@@ -950,6 +1055,49 @@ async function loadTradeHistory() {
         {optionsMenuOpen && (
           <div className="version-menu-panel">
             <div className="version-menu-title">OPTIONS MENU</div>
+            <div
+              className="operator-lock-panel"
+              style={{
+                marginTop: "10px",
+                padding: "10px",
+                border: operatorUnlocked ? "1px solid #9cff8f" : "1px solid #ffffff",
+                boxShadow: operatorUnlocked ? "0 0 12px rgba(156, 255, 143, 0.45)" : "none",
+              }}
+            >
+              <div className="version-menu-title">
+                {operatorUnlocked ? "OPERATOR MODE: UNLOCKED" : "OPERATOR MODE: LOCKED"}
+              </div>
+              <input
+                type="password"
+                value={operatorKey}
+                disabled={operatorUnlocked}
+                placeholder="OPERATOR PASSWORD"
+                onChange={(e) => setOperatorKey(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !operatorUnlocked) unlockOperatorMode();
+                }}
+                style={{
+                  width: "100%",
+                  marginTop: "8px",
+                  padding: "9px",
+                  background: "#020502",
+                  color: "#9cff8f",
+                  border: "1px solid #9cff8f",
+                  fontFamily: "Courier New, monospace",
+                  fontSize: "12px",
+                }}
+              />
+              <button
+                type="button"
+                className={operatorUnlocked ? "version-menu-option active" : "version-menu-option"}
+                onClick={operatorUnlocked ? lockOperatorMode : unlockOperatorMode}
+              >
+                {operatorUnlocked ? "LOCK CONTROLS" : "UNLOCK CONTROLS"}
+              </button>
+              <p style={{ marginTop: "8px", fontSize: "10px", lineHeight: "1.35" }}>
+                PUBLIC VISITORS CAN WATCH. ONLY THE OPERATOR CAN START, STOP, OR EXECUTE.
+              </p>
+            </div>
             <button
               type="button"
               className={viewMode === "simple" ? "version-menu-option active" : "version-menu-option"}
@@ -1087,6 +1235,10 @@ async function loadTradeHistory() {
                 <div className="simple-status-box">
                   <span>STATUS</span>
                   <strong>{autonomousMode ? "I AM RUNNING" : "I AM STOPPED"}</strong>
+                </div>
+                <div className="simple-status-box">
+                  <span>OPERATOR</span>
+                  <strong>{operatorUnlocked ? "UNLOCKED" : "VIEW-ONLY"}</strong>
                 </div>
                 <div className="simple-status-box simple-status-box-full">
                   <span>WALLET</span>
