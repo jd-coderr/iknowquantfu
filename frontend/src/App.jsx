@@ -1266,12 +1266,12 @@ async function loadTradeHistory() {
                 </div>
                 <div className="simple-status-box">
                   <span>WALLET</span>
-                  <strong>{walletAddress ? "WALLET IS CONNECTED" : "WALLET IS NOT CONNECTED"}</strong>
+                  <strong>{walletAddress ? "IS CONNECTED" : "IS NOT CONNECTED"}</strong>
                 </div>
 
                 <div className="simple-status-box">
                   <span>OPERATOR</span>
-                  <strong>{operatorUnlocked ? "OPERATOR UNLOCKED" : "OPERATOR LOCKED"}</strong>
+                  <strong>{operatorUnlocked ? "UNLOCKED" : "LOCKED"}</strong>
                 </div>
               </div>
 
