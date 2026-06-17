@@ -1275,7 +1275,7 @@ async function loadTradeHistory() {
         <section className={getDetailedQuadrantClass("who", "retro-quadrant retro-who")}>
           <div className="retro-quadrant-header">
             <span>WHO AM I?</span>
-            <span>IKQF v0.1.0</span>
+            <span>v0.1.0</span>
             {renderDetailedExpandButton("who")}
           </div>
 
