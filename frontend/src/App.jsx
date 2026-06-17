@@ -1163,7 +1163,7 @@ async function loadTradeHistory() {
               <div className="simple-control-grid">
                 <div>
                   <label>ASSET</label>
-                  <select value={coin} disabled={loading} onChange={(e) => setCoin(e.target.value)}>
+                  <select value={coin} disabled={loading} onChange={(e) => setCoin(e.target.value)} onWheel={(e) => e.currentTarget.blur()}>
                     <option value="ETH">Ethereum (ETH)</option>
                     <option value="XRP">XRP (XRP)</option>
                     <option value="DOGE">Dogecoin (DOGE)</option>
@@ -1196,6 +1196,7 @@ async function loadTradeHistory() {
                       setExecutionMode(mode);
                       setLiveExecution(mode === "live_trading");
                     }}
+                  onWheel={(e) => e.currentTarget.blur()}
                   >
                     <option value="decision_simulation">DECISION SIMULATION</option>
                     <option value="paper_trading">PAPER TRADING</option>
@@ -1204,12 +1205,17 @@ async function loadTradeHistory() {
                 </div>
                 <div>
                   <label>INTERVAL</label>
-                  <select value={autonomousInterval} disabled={autonomousMode} onChange={(e) => setAutonomousInterval(Number(e.target.value))}>
-                    <option value={1}>1 MINUTE</option>
-                    <option value={5}>5 MINUTES</option>
-                    <option value={15}>15 MINUTES</option>
-                    <option value={30}>30 MINUTES</option>
-                  </select>
+                  <select
+  value={autonomousInterval}
+  disabled={autonomousMode}
+  onChange={(e) => setAutonomousInterval(Number(e.target.value))}
+  onWheel={(e) => e.currentTarget.blur()}
+>
+  <option value={1}>1 MINUTE</option>
+  <option value={5}>5 MINUTES</option>
+  <option value={15}>15 MINUTES</option>
+  <option value={30}>30 MINUTES</option>
+</select>
                 </div>
                 <div>
                   <label>TRADE SIZE ({coin})</label>
@@ -1545,7 +1551,7 @@ async function loadTradeHistory() {
               <div className="input-row">
                 <div>
                   <label>ASSET</label>
-                  <select value={coin} disabled={loading} onChange={(e) => setCoin(e.target.value)}>
+                  <select value={coin} disabled={loading} onChange={(e) => setCoin(e.target.value)} onWheel={(e) => e.currentTarget.blur()}>
                     <option value="ETH">Ethereum (ETH)</option>
                     <option value="XRP">XRP (XRP)</option>
                     <option value="DOGE">Dogecoin (DOGE)</option>
@@ -1571,7 +1577,7 @@ async function loadTradeHistory() {
 
                 <div>
                   <label>TIMEFRAME</label>
-                  <select value={timeframe} disabled={loading} onChange={(e) => setTimeframe(e.target.value)}>
+                  <select value={timeframe} disabled={loading} onChange={(e) => setTimeframe(e.target.value)} onWheel={(e) => e.currentTarget.blur()}>
                     <option>15M</option>
                     <option>1H</option>
                     <option>4H</option>
@@ -1581,7 +1587,7 @@ async function loadTradeHistory() {
 
                 <div>
                   <label>RISK LEVEL</label>
-                  <select value={risk} disabled={loading} onChange={(e) => setRisk(e.target.value)}>
+                  <select value={risk} disabled={loading} onChange={(e) => setRisk(e.target.value)} onWheel={(e) => e.currentTarget.blur()}>
                     <option value="low">LOW</option>
                     <option value="medium">MEDIUM</option>
                     <option value="high">HIGH</option>
@@ -1627,6 +1633,7 @@ async function loadTradeHistory() {
                       setExecutionMode(mode);
                       setLiveExecution(mode === "live_trading");
                     }}
+                  onWheel={(e) => e.currentTarget.blur()}
                   >
                     <option value="decision_simulation">EXECUTION MODE - SIMULATION</option>
                     <option value="paper_trading">EXECUTION MODE - PAPER</option>
@@ -1638,7 +1645,12 @@ async function loadTradeHistory() {
                   AUTO CHECK FOR NEW TRADE OPPORTUNITY EVERY
                 </label>
 
-                <select value={autonomousInterval} disabled={autonomousMode} onChange={(e) => setAutonomousInterval(Number(e.target.value))}>
+                <select
+  value={autonomousInterval}
+  disabled={autonomousMode}
+  onChange={(e) => setAutonomousInterval(Number(e.target.value))}
+  onWheel={(e) => e.currentTarget.blur()}
+>
                   <option value={1}>1 MINUTE</option>
                   <option value={5}>5 MINUTES</option>
                   <option value={15}>15 MINUTES</option>
@@ -2314,7 +2326,12 @@ async function loadTradeHistory() {
         <div className="input-row">
           <div>
             <label>ASSET</label>
-            <select value={coin} disabled={loading} onChange={(e) => setCoin(e.target.value)}>
+            <select
+  value={coin}
+  disabled={loading}
+  onChange={(e) => setCoin(e.target.value)}
+  onWheel={(e) => e.currentTarget.blur()}
+>
                     <option value="ETH">Ethereum (ETH)</option>
                     <option value="XRP">XRP (XRP)</option>
                     <option value="DOGE">Dogecoin (DOGE)</option>
@@ -2340,7 +2357,7 @@ async function loadTradeHistory() {
 
           <div>
             <label>TIMEFRAME</label>
-            <select value={timeframe} disabled={loading} onChange={(e) => setTimeframe(e.target.value)}>
+            <select value={timeframe} disabled={loading} onChange={(e) => setTimeframe(e.target.value)} onWheel={(e) => e.currentTarget.blur()}>
               <option>15M</option>
               <option>1H</option>
               <option>4H</option>
@@ -2350,7 +2367,7 @@ async function loadTradeHistory() {
 
           <div>
             <label>RISK LEVEL</label>
-            <select value={risk} disabled={loading} onChange={(e) => setRisk(e.target.value)}>
+            <select value={risk} disabled={loading} onChange={(e) => setRisk(e.target.value)} onWheel={(e) => e.currentTarget.blur()}>
               <option value="low">LOW</option>
               <option value="medium">MEDIUM</option>
               <option value="high">HIGH</option>
@@ -2414,9 +2431,10 @@ async function loadTradeHistory() {
 
         <div>
           <select
-            value={executionMode}
-            disabled={autonomousMode || loading}
-            onChange={(e) => {
+  value={executionMode}
+  disabled={autonomousMode || loading}
+  onWheel={(e) => e.currentTarget.blur()}
+  onChange={(e) => {
               const mode = e.target.value;
               setExecutionMode(mode);
               setLiveExecution(mode === "live_trading");
@@ -2436,6 +2454,7 @@ async function loadTradeHistory() {
             value={autonomousInterval}
             disabled={autonomousMode}
             onChange={(e) => setAutonomousInterval(Number(e.target.value))}
+          onWheel={(e) => e.currentTarget.blur()}
           >
             <option value={1}>1 MINUTE</option>
             <option value={5}>5 MINUTES</option>
