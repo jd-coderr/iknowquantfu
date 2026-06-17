@@ -2882,3 +2882,9 @@ select option:hover {
 .full-terminal .capital-input input {
   padding-left: 34px;
 }
+
+/* Make Simple Version slogan subline match the body speech text size */
+.simple-brand-subline {
+  font-size: clamp(8px, 1.04vmin, 13px) !important;
+  line-height: 1.38 !important;
+}
