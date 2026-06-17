@@ -2880,3 +2880,17 @@ h2 {
   font-weight: bold !important;
   margin-bottom: 10px !important;
 }
+
+/* Simple Version: remove unnecessary dotted status decoration */
+.simple-square .simple-status-grid {
+  border-top: 1px solid rgba(156, 255, 143, 0.35) !important;
+  border-bottom: 1px solid rgba(156, 255, 143, 0.35) !important;
+}
+
+.simple-square .simple-status-box {
+  border-bottom: 1px solid rgba(156, 255, 143, 0.28) !important;
+}
+
+.simple-square .simple-status-box:nth-last-child(-n + 2) {
+  border-bottom: none !important;
+}
