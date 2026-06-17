@@ -938,7 +938,7 @@ def generate_strategy(request: StrategyRequest):
 
 @app.post("/optimize-strategy")
 def optimize_strategy(request: OptimizeRequest):
-    timeframes = ["1M", "5M", "15M", "1H", "4H", "1D"]
+    timeframes = ["5M", "15M", "1H", "4H", "1D"]
     risk_levels = ["low", "medium", "high"]
     strategies = load_available_strategies()
 
