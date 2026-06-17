@@ -1265,12 +1265,13 @@ async function loadTradeHistory() {
                   <strong>{autonomousMode ? "I AM RUNNING" : "I AM STOPPED"}</strong>
                 </div>
                 <div className="simple-status-box">
-                  <span>OPERATOR</span>
-                  <strong>{operatorUnlocked ? "UNLOCKED" : "VIEW-ONLY"}</strong>
-                </div>
-                <div className="simple-status-box simple-status-box-full">
                   <span>WALLET</span>
-                  <strong>{walletAddress ? "YOUR WALLET IS CONNECTED" : "YOUR WALLET IS NOT CONNECTED"}</strong>
+                  <strong>{walletAddress ? "WALLET IS CONNECTED" : "WALLET IS NOT CONNECTED"}</strong>
+                </div>
+
+                <div className="simple-status-box">
+                  <span>OPERATOR</span>
+                  <strong>{operatorUnlocked ? "OPERATOR UNLOCKED" : "OPERATOR LOCKED"}</strong>
                 </div>
               </div>
 
