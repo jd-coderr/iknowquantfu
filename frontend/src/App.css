@@ -712,18 +712,17 @@ h2 {
 }
 
 .detailed-agent-text-glow {
-  display: inline-block;
   color: #ffffff !important;
-  padding: 2px 6px;
-  border: 1px solid #ffffff;
-  background: rgba(156, 255, 143, 0.12);
-  box-shadow:
-    0 0 18px rgba(156, 255, 143, 0.72),
-    inset 0 0 14px rgba(156, 255, 143, 0.14);
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
   text-shadow:
     0 0 4px #ffffff,
-    0 0 10px #9cff8f;
-  animation: agentActiveGlow 14.4s infinite ease-in-out;
+    0 0 10px #9cff8f,
+    0 0 18px rgba(156, 255, 143, 0.82);
+  animation: detailedAgentTextGlow 14.4s infinite ease-in-out;
 }
 
 .simple-agent-current-state strong {
@@ -745,6 +744,24 @@ h2 {
     box-shadow:
       0 0 26px rgba(156, 255, 143, 0.92),
       inset 0 0 24px rgba(156, 255, 143, 0.22);
+  }
+}
+
+@keyframes detailedAgentTextGlow {
+  0%,
+  100% {
+    color: #9cff8f;
+    text-shadow:
+      0 0 3px #9cff8f,
+      0 0 8px rgba(156, 255, 143, 0.55);
+  }
+
+  50% {
+    color: #ffffff;
+    text-shadow:
+      0 0 5px #ffffff,
+      0 0 13px #9cff8f,
+      0 0 24px rgba(156, 255, 143, 0.95);
   }
 }
 
