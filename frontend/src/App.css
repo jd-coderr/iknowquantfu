@@ -2828,3 +2828,39 @@ h2 {
   margin-left: auto !important;
   margin-right: auto !important;
 }
+
+/* Fix Chrome native dropdown option colors */
+select option {
+  background: #020502;
+  color: #9cff8f;
+}
+
+select option:checked {
+  background: rgba(156, 255, 143, 0.22);
+  color: #ffffff;
+}
+
+select option:hover {
+  background: rgba(156, 255, 143, 0.18);
+  color: #ffffff;
+}
+
+/* Chrome dropdown color fix */
+html {
+  color-scheme: dark;
+}
+
+select option {
+  background: #020502;
+  color: #9cff8f;
+}
+
+select option:checked {
+  background: rgba(156, 255, 143, 0.22);
+  color: #ffffff;
+}
+
+select option:hover {
+  background: rgba(156, 255, 143, 0.18);
+  color: #ffffff;
+}
