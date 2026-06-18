@@ -2991,8 +2991,6 @@ async function loadTradeHistory() {
         I KNOW QUANT FU<span className="blink">_</span>
       </h1>
 
-      <p className="subtitle">AI-POWERED TRADING AGENT</p>
-
       <p className="full-slogan">Roundhouse kick dumb trades.</p>
       <p className="full-subline-no-glow">Backtest the signal. Lock the risk. Automate the move.</p>
 
