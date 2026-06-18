@@ -1672,8 +1672,6 @@ async function loadTradeHistory() {
               <div className="simple-metric-row"><span>CURRENT DRAWDOWN</span><strong>{agentResult?.risk_control?.current_drawdown_pct !== undefined ? `${agentResult.risk_control.current_drawdown_pct}%` : "N/A"}</strong></div>
               <div className="simple-metric-row"><span>MAX DRAWDOWN LIMIT</span><strong>{agentResult?.risk_control?.max_drawdown_limit_pct !== undefined ? `${agentResult.risk_control.max_drawdown_limit_pct}%` : "N/A"}</strong></div>
               <div className="simple-metric-row"><span>PORTFOLIO VALUE</span><strong>{portfolioValue}</strong></div>
-              <div className="simple-metric-row"><span>DAILY QUALIFICATION</span><strong>{agentResult?.daily_qualification?.status || "N/A"}</strong></div>
-              <div className="simple-metric-row"><span>TRADES TODAY</span><strong>{agentResult?.daily_qualification ? `${agentResult.daily_qualification.trades_today ?? "N/A"} / ${agentResult.daily_qualification.target_trades_per_day ?? "N/A"}` : "N/A"}</strong></div>
             </div>
           </section>
 
@@ -1776,7 +1774,7 @@ async function loadTradeHistory() {
               </div>
             </details>
 
-            {agentResult?.daily_qualification && (
+            {agentResult && (
               <details className="retro-window">
                 <summary>HACKATHON / ON-CHAIN VERIFICATION</summary>
                 <div className="metrics strategy-library-box verification-panel">
@@ -1867,8 +1865,6 @@ async function loadTradeHistory() {
                 <p>DRAWDOWN............ {agentResult?.risk_control?.current_drawdown_pct !== undefined ? `${agentResult.risk_control.current_drawdown_pct}%` : "N/A"}</p>
                 <p>RISK STATUS......... {agentResult?.risk_control?.status || "N/A"}</p>
                 <p>PAPER VALUE........ {paperPortfolio ? formatMoney(paperPortfolio.total_value_usdt) : "N/A"}</p>
-                <p>DAILY TRADE STATUS.. {agentResult?.daily_qualification?.status || "N/A"}</p>
-                <p>TRADES TODAY........ {agentResult?.daily_qualification?.trades_today ?? "N/A"} / {agentResult?.daily_qualification?.target_trades_per_day ?? "N/A"}</p>
               </div>
             </details>
 
@@ -2247,7 +2243,6 @@ async function loadTradeHistory() {
                           <p style={{ color: "#9cff8f" }}>TYPE: {isRealTrade ? "REAL TRADE / EXECUTION" : "DECISION ONLY"}</p>
                           {trade.confidence_score !== undefined && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TRADE CONFIDENCE: {trade.confidence_score} / 100</p>}
                           {trade.risk_control?.current_drawdown_pct !== undefined && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>DRAWDOWN: {trade.risk_control.current_drawdown_pct}% / LIMIT {trade.risk_control.max_drawdown_limit_pct}%</p>}
-                          {trade.daily_qualification && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>DAILY QUALIFICATION: {trade.daily_qualification.trades_today} / {trade.daily_qualification.target_trades_per_day} — {trade.daily_qualification.status}</p>}
                           {trade.why?.length > 0 && (
                             <div style={{ color: isRealTrade ? "#9cff8f" : "#808080", marginTop: "8px" }}>
                               <p>WHY:</p>
@@ -2680,10 +2675,6 @@ async function loadTradeHistory() {
                     <p>Strategy Quality: backtest strength, return, drawdown, and risk-adjusted score.</p>
                     <p>Risk Conditions: whether drawdown and safety limits are acceptable.</p>
                     <br />
-                    <p><strong>DAILY QUALIFICATION GUARD</strong></p>
-                    <p>Competition rule helper. If no live trade happened during the UTC day, the agent may attempt a small qualifying trade in the final UTC hour.</p>
-                    <p>The forced trade uses the configured trade size, aims for +2%, limits downside to -1%, and exits before UTC day end.</p>
-                    <br />
                     <p><strong>PORTFOLIO PERFORMANCE</strong></p>
                     <p>Starting Value: portfolio value when tracking began or after reset.</p>
                     <p>Current Value: current estimated portfolio value.</p>
@@ -2703,21 +2694,6 @@ async function loadTradeHistory() {
               </details>
             )}
 
-            {agentResult?.daily_qualification && (
-              <details className="retro-window">
-                <summary>DAILY QUALIFICATION GUARD</summary>
-                <div className="metrics strategy-library-box">
-                  <p><strong>DAILY QUALIFICATION GUARD</strong></p>
-                  <p>STATUS.............. {agentResult.daily_qualification.status || "N/A"}</p>
-                  <p>TRADES TODAY........ {agentResult.daily_qualification.trades_today ?? "N/A"} / {agentResult.daily_qualification.target_trades_per_day ?? "N/A"}</p>
-                  <p>FORCED WINDOW....... LAST {agentResult.daily_qualification.forced_window_minutes ?? "N/A"} MINUTES OF UTC DAY</p>
-                  <p>MINUTES LEFT TODAY.. {agentResult.daily_qualification.minutes_until_utc_day_end ?? "N/A"}</p>
-                  <p>FORCED TP TARGET.... +{agentResult.daily_qualification.take_profit_pct ?? "N/A"}%</p>
-                  <p>FORCED MAX DOWNSIDE. -{agentResult.daily_qualification.stop_loss_pct ?? "N/A"}%</p>
-                  <p>TIME EXIT BUFFER.... {agentResult.daily_qualification.time_exit_buffer_minutes ?? "N/A"} MINUTES BEFORE UTC DAY END</p>
-                </div>
-              </details>
-            )}
           </div>
         </section>
 
@@ -3139,8 +3115,6 @@ async function loadTradeHistory() {
   <p>DRAWDOWN............ {agentResult?.risk_control?.current_drawdown_pct !== undefined ? `${agentResult.risk_control.current_drawdown_pct}%` : "N/A"}</p>
   <p>RISK STATUS......... {agentResult?.risk_control?.status || "N/A"}</p>
   <p>PAPER VALUE........ {paperPortfolio ? formatMoney(paperPortfolio.total_value_usdt) : "N/A"}</p>
-  <p>DAILY TRADE STATUS.. {agentResult?.daily_qualification?.status || "N/A"}</p>
-  <p>TRADES TODAY........ {agentResult?.daily_qualification?.trades_today ?? "N/A"} / {agentResult?.daily_qualification?.target_trades_per_day ?? "N/A"}</p>
   <p>AGENT STATUS....... {autonomousMode ? "LIVE TRADING READY" : "STOPPED"}</p>
 </div>
 
@@ -3339,11 +3313,6 @@ const isRealTrade =
   </p>
 )}
 
-{trade.daily_qualification && (
-  <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>
-    DAILY QUALIFICATION: {trade.daily_qualification.trades_today} / {trade.daily_qualification.target_trades_per_day} — {trade.daily_qualification.status}
-  </p>
-)}
 
 {trade.why?.length > 0 && (
   <div style={{ color: isRealTrade ? "#9cff8f" : "#808080", marginTop: "8px" }}>
@@ -3553,7 +3522,7 @@ const isRealTrade =
       )}
 
 
-{agentResult?.daily_qualification && (
+{agentResult && (
   <div className="panel verification-panel">
     <div className="panel-title">AGENT VERIFICATION</div>
 
@@ -3571,17 +3540,6 @@ const isRealTrade =
       {getExecutionTxHash() && (
         <p>BSCSCAN............ https://bscscan.com/tx/{getExecutionTxHash()}</p>
       )}
-
-      <br />
-
-      <p><strong>DAILY QUALIFICATION GUARD</strong></p>
-      <p>STATUS.............. {agentResult.daily_qualification.status || "N/A"}</p>
-      <p>TRADES TODAY........ {agentResult.daily_qualification.trades_today ?? "N/A"} / {agentResult.daily_qualification.target_trades_per_day ?? "N/A"}</p>
-      <p>FORCED WINDOW....... LAST {agentResult.daily_qualification.forced_window_minutes ?? "N/A"} MINUTES OF UTC DAY</p>
-      <p>MINUTES LEFT TODAY.. {agentResult.daily_qualification.minutes_until_utc_day_end ?? "N/A"}</p>
-      <p>FORCED TP TARGET.... +{agentResult.daily_qualification.take_profit_pct ?? "N/A"}%</p>
-      <p>FORCED MAX DOWNSIDE. -{agentResult.daily_qualification.stop_loss_pct ?? "N/A"}%</p>
-      <p>TIME EXIT BUFFER.... {agentResult.daily_qualification.time_exit_buffer_minutes ?? "N/A"} MINUTES BEFORE UTC DAY END</p>
     </div>
   </div>
 )}
@@ -3785,12 +3743,6 @@ const isRealTrade =
               <p>Altcoin Rotation: whether capital is generally flowing toward altcoins.</p>
               <p>Strategy Quality: backtest strength, return, drawdown, and risk-adjusted score.</p>
               <p>Risk Conditions: whether drawdown and safety limits are acceptable.</p>
-
-              <br />
-
-              <p><strong>DAILY QUALIFICATION GUARD</strong></p>
-              <p>Competition rule helper. If no live trade happened during the UTC day, the agent may attempt a small qualifying trade in the final UTC hour.</p>
-              <p>The forced trade uses the configured trade size, aims for +2%, limits downside to -1%, and exits before UTC day end.</p>
 
               <br />
 
