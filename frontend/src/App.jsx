@@ -24,6 +24,16 @@ function App() {
     return Number.isFinite(saved) ? saved : fallback;
   }
 
+  function getSavedNullableNumberSetting(key) {
+    if (typeof window === "undefined") return null;
+
+    const saved = window.localStorage.getItem(key);
+    if (saved === null || saved === "") return null;
+
+    const number = Number(saved);
+    return Number.isFinite(number) ? number : null;
+  }
+
   const [autonomousMode, setAutonomousMode] = useState(false);
   const [autonomousStatus, setAutonomousStatus] = useState(null);
   const [autonomousInterval, setAutonomousInterval] = useState(() => getSavedNumberSetting("ikqf_autonomous_interval", 5));
@@ -39,7 +49,12 @@ function App() {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [tradeHistory, setTradeHistory] = useState([]);
   const [showOnlyRealTrades, setShowOnlyRealTrades] = useState(false);
-  const [startingPortfolioValue, setStartingPortfolioValue] = useState(null);
+  const [startingPortfolioValue, setStartingPortfolioValue] = useState(() =>
+    getSavedNullableNumberSetting("ikqf_starting_portfolio_value")
+  );
+  const [startingPortfolioTimestamp, setStartingPortfolioTimestamp] = useState(() =>
+    getSavedSetting("ikqf_starting_portfolio_timestamp", "")
+  );
   const [liveExecution, setLiveExecution] = useState(false);
   const [executionMode, setExecutionMode] = useState(() => getSavedSetting("ikqf_execution_mode", ""));
   const [paperPortfolio, setPaperPortfolio] = useState(null);
@@ -205,6 +220,27 @@ function App() {
     if (Number.isNaN(date.getTime())) return "N/A";
 
     return date.toLocaleString("de-DE");
+  }
+
+  function formatPortfolioBaselineDate(value) {
+    if (!value) return "SINCE NOT SET";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "SINCE NOT SET";
+
+    return `SINCE ${date.toLocaleString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+  }
+
+  function getPortfolioStartValueLabel() {
+    if (!portfolio) return "N/A";
+
+    return `${formatMoney(portfolio.startingPortfolioValue || 0)} (${formatPortfolioBaselineDate(portfolio.startingPortfolioTimestamp)})`;
   }
 
   function formatEquityTooltipLabel(label, payload) {
@@ -1597,13 +1633,20 @@ async function runAgentCycle() {
         0
       );
 
-const startingValue =
-  startingPortfolioValue === null
-    ? totalUsdValue
-    : startingPortfolioValue;
+let startingValue = startingPortfolioValue;
+let baselineTimestamp = startingPortfolioTimestamp;
 
-if (startingPortfolioValue === null) {
-  setStartingPortfolioValue(totalUsdValue);
+if (startingValue === null) {
+  startingValue = totalUsdValue;
+  baselineTimestamp = new Date().toISOString();
+
+  setStartingPortfolioValue(startingValue);
+  setStartingPortfolioTimestamp(baselineTimestamp);
+
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("ikqf_starting_portfolio_value", String(startingValue));
+    window.localStorage.setItem("ikqf_starting_portfolio_timestamp", baselineTimestamp);
+  }
 }
 
 setPortfolio({
@@ -1611,6 +1654,7 @@ setPortfolio({
   assets,
   totalUsdValue,
   startingPortfolioValue: startingValue,
+  startingPortfolioTimestamp: baselineTimestamp,
   tradingPnlUsd: totalUsdValue - startingValue,
 });
     } catch (err) {
@@ -1667,11 +1711,20 @@ function resetPnlBaseline() {
     return;
   }
 
+  const baselineTimestamp = new Date().toISOString();
+
   setStartingPortfolioValue(portfolio.totalUsdValue);
+  setStartingPortfolioTimestamp(baselineTimestamp);
+
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("ikqf_starting_portfolio_value", String(portfolio.totalUsdValue));
+    window.localStorage.setItem("ikqf_starting_portfolio_timestamp", baselineTimestamp);
+  }
 
   setPortfolio({
     ...portfolio,
     startingPortfolioValue: portfolio.totalUsdValue,
+    startingPortfolioTimestamp: baselineTimestamp,
     tradingPnlUsd: 0,
   });
 }
@@ -2227,7 +2280,7 @@ async function loadTradeHistory() {
                 <br />
 
                 <p>TOTAL VALUE........... {formatMoney(portfolio?.totalUsdValue || 0)}</p>
-                <p>START VALUE........... {formatMoney(portfolio?.startingPortfolioValue || 0)}</p>
+                <p>START VALUE........... {getPortfolioStartValueLabel()}</p>
                 <p>
                   TRADING P/L...........{" "}
                   {Number(portfolio?.tradingPnlUsd || 0) >= 0 ? "+" : "-"}$
@@ -3359,6 +3412,8 @@ async function loadTradeHistory() {
   <p>
     AGENT TOTAL VALUE.... {formatMoney(portfolio?.totalUsdValue || 0)}
   </p>
+
+  <p>AGENT START VALUE... {getPortfolioStartValueLabel()}</p>
 
   <p>AGENT ADDRESS...... {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
   <p>SELECTED TIMEFRAME.. {timeframe}</p>
