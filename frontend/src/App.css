@@ -3268,7 +3268,7 @@ select option:checked {
   box-sizing: border-box;
 }
 
-.ikqf-full-v2-page *:not(.ikqf-full-v2-title):not(.ikqf-full-v2-title *) {
+.ikqf-full-v2-page * {
   font-family: "Courier New", monospace !important;
 }
 
@@ -3349,21 +3349,19 @@ select option:checked {
   margin: clamp(16px, 2vw, 28px) 0 clamp(8px, 1vw, 14px);
   padding: 0;
   color: var(--v2-white);
-  font-family: "Lucida Console", "Courier New", "Consolas", monospace !important;
-  font-size: var(--v2-title);
-  line-height: 0.95;
-  letter-spacing: clamp(3px, 0.55vw, 9px);
-  word-spacing: clamp(4px, 0.55vw, 10px);
+  font-family: "Courier New", monospace !important;
+  font-size: clamp(32px, 5.2vmin, 70px);
+  line-height: 0.92;
+  letter-spacing: clamp(2px, 0.8vmin, 8px);
+  word-spacing: normal;
   text-align: center;
   text-transform: uppercase;
   white-space: nowrap;
-  font-weight: 900;
-  transform: scaleX(1.04);
-  transform-origin: center;
+  font-weight: bold;
+  transform: none;
   text-shadow:
     0 0 4px #ffffff,
-    0 0 12px rgba(156, 255, 143, 0.95),
-    0 0 28px rgba(156, 255, 143, 0.52);
+    0 0 10px #9cff8f;
 }
 
 .ikqf-full-v2-title .blink {
