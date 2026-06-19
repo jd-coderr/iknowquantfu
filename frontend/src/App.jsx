@@ -2412,6 +2412,7 @@ async function loadTradeHistory() {
               </h1>
 
               <p className="subtitle retro-subtitle">ROUNDHOUSE KICK DUMB TRADES.</p>
+              <p className="retro-brand-subline-white"><strong>Backtest the signal. Lock the risk. Automate the move.</strong></p>
 
               <div className="hero-description retro-hero-description">
                 I Know Quant Fu is an AI trading agent powered by CoinMarketCap market intelligence,
@@ -2420,7 +2421,6 @@ async function loadTradeHistory() {
               </div>
 
               <div className="metrics retro-mini-window">
-                <p className="retro-brand-subline-white"><strong>Backtest the signal. Lock the risk. Automate the move.</strong></p>
                 <p>I Know Quant Fu turns noisy crypto market data into explainable autonomous trading decisions.</p>
               </div>
             </div>

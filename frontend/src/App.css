@@ -3220,3 +3220,12 @@ select option:checked {
     margin: 30px auto 34px !important;
   }
 }
+
+/* Detailed Version: place Backtest line directly under Roundhouse, like Simple Version */
+.retro-square .retro-who .retro-brand-subline-white {
+  display: block !important;
+  margin: 0 0 clamp(8px, 1.4vmin, 14px) !important;
+  text-align: center !important;
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
