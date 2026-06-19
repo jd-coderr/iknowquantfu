@@ -1,21 +1,34 @@
-# I Know Quant Fu - https://www.iknowquantfu.com
+# I Know Quant Fu
+
+https://www.iknowquantfu.com
 
 ## Autonomous Crypto Trading Agent for the BNB Hack: AI Trading Agent Edition
 
 **I Know Quant Fu** is an autonomous crypto trading agent built for the **BNB Hack: AI Trading Agent Edition — CoinMarketCap × Trust Wallet** competition.
 
-The project connects market intelligence, strategy logic, risk control, and self-custody execution into one trading loop.
+It connects CoinMarketCap market intelligence, strategy testing, risk control, and Trust Wallet Agent Kit execution into one explainable trading loop.
 
 **Roundhouse kick dumb trades.**
 **Backtest the signal. Lock the risk. Automate the move.**
+
+The agent does not chase candles.
+It reads the market, tests the strategy, checks the risk, explains the decision, and only then decides whether to wait, simulate, paper trade, or execute.
+
+No confidence. No trade.
+No logic. No trade.
+No dojo. No roundhouse.
 
 ---
 
 ## Vision
 
-I Know Quant Fu bridges market intelligence and disciplined execution. It reads CoinMarketCap signals, compares and backtests strategies, applies risk guardrails, then decides whether to wait, simulate, paper trade, or execute through Trust Wallet Agent Kit on BNB Chain with on-chain proof.
+I Know Quant Fu bridges market intelligence and disciplined execution.
 
-The goal is not just automation. The goal is explainable, self-custodial, risk-aware trading.
+It reads CoinMarketCap signals, compares and backtests strategies, applies risk guardrails, then decides whether to wait, simulate, paper trade, or execute through Trust Wallet Agent Kit on BNB Chain with on-chain proof.
+
+The goal is not just automation.
+
+The goal is explainable, self-custodial, risk-aware trading.
 
 ---
 
@@ -24,9 +37,12 @@ The goal is not just automation. The goal is explainable, self-custodial, risk-a
 Crypto traders often face two bad options:
 
 1. **Manual trading**, where emotion, fear, greed, and inconsistent rules lead to bad entries and poor risk control.
-2. **Basic trading bots**, which blindly execute fixed rules without understanding market regime, confidence, or whether a trade should be skipped.
 
-Most systems also separate the market intelligence layer from the wallet execution layer. A user reads data in one place, makes decisions somewhere else, and manually executes trades through another interface.
+2. **Basic trading bots**, which blindly execute fixed rules without understanding market regime, confidence, risk, or whether a trade should be skipped.
+
+Most systems also separate the market intelligence layer from the wallet execution layer.
+
+A user reads data in one place, makes decisions somewhere else, and manually executes trades through another interface.
 
 I Know Quant Fu solves this by connecting the full loop:
 
@@ -48,17 +64,20 @@ CoinMarketCap intelligence
 I Know Quant Fu can:
 
 * Read CoinMarketCap market intelligence
-* Generate and compare trading strategies
-* Run historical backtests
+* Detect market regime and sentiment conditions
+* Generate, compare, and backtest trading strategies
 * Rank strategies by risk-adjusted performance
-* Check confidence and risk guardrails
-* Decide whether to wait, simulate, paper trade, or execute live
+* Apply confidence scoring and drawdown protection
+* Decide whether to hold, simulate, paper trade, or execute live
 * Connect to a user wallet
-* Execute through Trust Wallet Agent Kit / TWAK
-* Route trades on BNB Chain
-* Display trade decisions, execution status, and proof
-* Maintain paper portfolio and trade history
-* Explain why it acted or why it waited
+* Attempt execution through Trust Wallet Agent Kit
+* Route swaps through PancakeSwap on BNB Smart Chain
+* Display trade decisions, execution status, portfolio state, and proof
+* Maintain paper trading history and performance analytics
+* Explain why it acted — or why it waited
+
+Waiting is not a bug.
+Waiting is the agent refusing to roundhouse kick itself in the face.
 
 ---
 
@@ -75,7 +94,7 @@ Market Data In
 → On-Chain Proof
 ```
 
-The agent does not force trades. Waiting is part of the system.
+The agent does not force trades.
 
 If the market is unclear, confidence is too low, or risk controls fail, the agent can choose:
 
@@ -83,7 +102,9 @@ If the market is unclear, confidence is too low, or risk controls fail, the agen
 HOLD / NO EXECUTION
 ```
 
-This is intentional. The agent is designed to avoid dumb trades, not chase every signal.
+This is intentional.
+
+The agent is designed to avoid dumb trades, not chase every signal.
 
 ---
 
@@ -142,7 +163,7 @@ chain: bsc
 
 * Strategy generation
 * Multi-strategy optimization
-* Backtesting
+* Historical backtesting
 * Risk-adjusted ranking
 * Strategy selection based on performance and guardrails
 
@@ -154,10 +175,11 @@ chain: bsc
 * Daily qualification guard
 * Trade size controls
 * Execution mode controls
+* Portfolio safety checks
 
 ### Execution Modes
 
-The agent supports three modes:
+The agent supports three execution modes:
 
 ```txt
 Decision Simulation
@@ -165,34 +187,50 @@ Paper Trading
 Live Trading
 ```
 
-Decision Simulation logs the decision without opening a trade.
+**Decision Simulation** logs the decision only. No live trade is executed and no virtual position is opened.
 
-Paper Trading tests execution logic without real capital.
+**Paper Trading** opens and closes virtual positions, tracks paper PnL, and can be reset without touching the live wallet.
 
-Live Trading routes execution through TWAK on BNB Chain.
+**Live Trading** attempts real wallet-based execution through TWAK when configured and authorized.
 
 ### Wallet + Execution
 
 * Wallet connection
 * BNB Smart Chain network support
-* TWAK execution layer
+* Trust Wallet Agent Kit execution layer
 * PancakeSwap route support
 * Transaction status display
 * BSC transaction hash detection
 * Agent registration display
 
-### Frontend Views
+---
 
-The app includes three website modes:
+## Frontend Views
 
-1. **Simple Version**
-   A 4-panel explanation-focused interface for judges and users.
+The app includes three interface modes:
 
-2. **Detailed Version**
-   A 4-square expandable terminal interface showing technical agent status, activity, strategy logic, proof, portfolio, and analytics.
+### 1. Simple Version
 
-3. **Full Size Version**
-   A long-form terminal interface with full trading controls, logs, strategy analytics, and execution details.
+A judge-friendly 4-panel interface that explains the project quickly and clearly.
+
+This mode focuses on:
+
+* What the agent is
+* What it does
+* When the operator uses it
+* How the decision logic works
+
+### 2. Detailed Version
+
+A compact terminal dashboard showing agent status, strategy selection, portfolio state, execution readiness, risk controls, and system proof.
+
+This mode is for users who want more information without reading the full trading terminal.
+
+### 3. Full Size Version
+
+A full scrolling terminal interface with trading controls, optimizer reports, market regime analysis, live logs, strategy analytics, backtest history, execution details, and system health.
+
+This is the machine room.
 
 ---
 
@@ -250,14 +288,14 @@ The backend URL may still contain the old project name because it is the Railway
 
 ## How It Works
 
-1. User selects an eligible asset.
-2. User chooses execution mode.
-3. User selects trade interval and trade size.
-4. Agent reads market intelligence.
-5. Agent generates or optimizes strategy logic.
-6. Strategy is backtested and ranked.
+1. The user selects an eligible asset.
+2. The user chooses an execution mode.
+3. The user selects trade interval and trade size.
+4. The agent reads market intelligence.
+5. The agent generates or optimizes strategy logic.
+6. The strategy is backtested and ranked.
 7. Risk guardrails are checked.
-8. Agent decides whether to wait, simulate, paper trade, or execute.
+8. The agent decides whether to wait, simulate, paper trade, or execute.
 9. If execution is allowed, TWAK handles the self-custody execution path.
 10. The UI displays decision, route, status, and proof.
 
@@ -288,9 +326,13 @@ The agent may decide:
 HOLD
 ```
 
-when the market is neutral, risk is not clean, or confidence is too low.
+when the market is neutral, risk is not clean, confidence is too low, or no valid entry signal exists.
 
-It may produce a trade plan when conditions align:
+This is not failure.
+
+This is the agent refusing to kick a bad trade.
+
+The agent may produce a trade plan when conditions align:
 
 ```txt
 BUY / SELL
@@ -304,7 +346,9 @@ In live mode, successful execution should return a BSC transaction hash.
 
 ## Eligible Assets
 
-The frontend is designed to use competition-eligible assets only. Examples include:
+The frontend is designed to use competition-eligible assets only.
+
+Examples include:
 
 ```txt
 ETH
@@ -387,7 +431,9 @@ Do not commit:
 * Railway secrets
 * Production `.env` files
 
-Self-custody integrity is important to the project. Signing authority should stay with the user or configured agent wallet through the TWAK flow.
+Self-custody integrity is important to the project.
+
+Signing authority should stay with the user or configured agent wallet through the TWAK flow.
 
 ---
 
@@ -397,6 +443,8 @@ This software is provided for educational, experimental, and hackathon demonstra
 
 Nothing in this project is financial advice, investment advice, or a recommendation to buy or sell any asset.
 
-Cryptocurrency trading involves significant risk and may result in loss of capital. Past performance does not guarantee future results.
+Cryptocurrency trading involves significant risk and may result in loss of capital.
+
+Past performance does not guarantee future results.
 
 Use live trading mode only with small amounts and at your own risk.
