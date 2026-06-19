@@ -2342,22 +2342,16 @@ async function loadTradeHistory() {
               <div className="simple-metric-row"><span>CONFIDENCE</span><strong>{confidenceLabel}</strong></div>
 
               <div className="simple-message-box">
-                <strong>BEFORE I TRADE</strong>
+                <strong>MY LOOP</strong>
                 <p>
-                  WHEN?
+                  I read the market, choose the strongest available strategy, score the confidence, check drawdown, then decide: wait, simulate, paper trade, or execute.
+                </p>
+              </div>
 
-This is where the operator tells me what to hunt.
-
-Choose the crypto, timeframe, risk level, execution mode, and check interval. Or let me auto-optimize the setup first: I compare strategies, backtest the signal history, rank the results, and select the strongest setup for the chosen asset.
-
-The human chooses the target.
-The optimizer finds the best setup.
-The agent checks the market.
-The risk governor decides if the trade is allowed.
-
-No setup. No trade.
-No edge. No roundhouse.
-
+              <div className="simple-message-box">
+                <strong>TERMINAL RULE</strong>
+                <p>
+                  No confidence. No trade. No logic. No trade. The candle must earn the roundhouse.
                 </p>
               </div>
             </div>
@@ -2370,8 +2364,19 @@ No edge. No roundhouse.
             </div>
             <div className="simple-quadrant-body">
               <p className="simple-speech-text">
-                This is where the operator starts the machine. Choose the asset, timeframe, risk level, strategy method, execution mode, and check interval. The human sets the rules. The agent checks the market. The risk governor decides if the trade is allowed.
+                You set the mission. I scan on schedule, but I only act after a closed candle, a valid signal, and risk approval.
               </p>
+
+              <div className="simple-message-box">
+                <strong>OPERATOR FLOW</strong>
+                <p>Choose the asset, mode, interval, and size. Then optimize, connect, and run the agent.</p>
+              </div>
+
+              <div className="simple-metric-row"><span>SETUP</span><strong>{coin} / {timeframe} / {getExecutionModeLabel()}</strong></div>
+              <div className="simple-metric-row"><span>OPTIMIZER</span><strong>{autoOptimized || result?.optimization ? "SETUP AUTO-OPTIMIZED" : "READY TO RANK STRATEGIES"}</strong></div>
+              <div className="simple-metric-row"><span>CHECKS</span><strong>EVERY {autonomousInterval} MINUTES</strong></div>
+              <div className="simple-metric-row"><span>TRIGGER</span><strong>CLOSED {timeframe} CANDLE + VALID SIGNAL</strong></div>
+              <div className="simple-metric-row"><span>RISK</span><strong>{getRiskProfileLabel(risk)}</strong></div>
 
               <div className="simple-action-grid">
                 <button onClick={optimizeStrategy} disabled={loading} style={getButtonStyle("optimize")}>
@@ -2462,10 +2467,14 @@ No edge. No roundhouse.
                 </div>
               </div>
 
+              <div className="simple-message-box">
+                <strong>TIMING RULE</strong>
+                <p>I can check often. I still wait for confirmation. Signal tested. Ego rejected.</p>
+              </div>
+
               <div className="simple-metric-row"><span>RISK STATUS</span><strong>{riskStatus}</strong></div>
-              <div className="simple-metric-row"><span>PORTFOLIO DRAWDOWN</span><strong>{getSimplePortfolioDrawdownLabel()}</strong></div>
-              <div className="simple-metric-row"><span>MAX DRAWDOWN LIMIT</span><strong>{agentResult?.risk_control?.max_drawdown_limit_pct !== undefined ? `${agentResult.risk_control.max_drawdown_limit_pct}%` : "N/A"}</strong></div>
-              <div className="simple-metric-row"><span>PORTFOLIO VALUE</span><strong>{portfolioValue}</strong></div>
+              <div className="simple-metric-row"><span>DRAWDOWN</span><strong>{getSimplePortfolioDrawdownLabel()}</strong></div>
+              <div className="simple-metric-row"><span>PORTFOLIO</span><strong>{portfolioValue}</strong></div>
             </div>
           </section>
 
@@ -2479,21 +2488,35 @@ No edge. No roundhouse.
             </div>
             <div className="simple-quadrant-body">
               <p className="simple-speech-text">
-                Every decision is logged. If I wait, I explain why. If I act, I show the route. If I trade live, the proof belongs on-chain.
+                I show the proof before the punchline. Strategy first. Risk second. Execution last.
               </p>
 
-              <div className="simple-metric-row simple-agent-current-state"><span>I AM</span><strong>{autonomousMode ? "CURRENTLY RUNNING" : "CURRENTLY STOPPED"}</strong></div>
+              <div className="simple-message-box">
+                <strong>STRATEGY PROOF</strong>
+                <div className="simple-metric-row"><span>STRATEGY</span><strong>{selectedStrategy}</strong></div>
+                <div className="simple-metric-row"><span>STATUS</span><strong>{result ? (isApproved() ? "APPROVED" : "REJECTED") : "WAITING FOR PROOF"}</strong></div>
+                <div className="simple-metric-row"><span>RATING</span><strong>{result ? getOverallRating() : "N/A"}</strong></div>
+                <div className="simple-metric-row"><span>RETURN</span><strong>{result?.backtest?.net_return || "N/A"}</strong></div>
+                <div className="simple-metric-row"><span>MAX DD</span><strong>{result?.backtest?.max_drawdown || "N/A"}</strong></div>
+                <div className="simple-metric-row"><span>WIN RATE</span><strong>{result?.backtest?.win_rate || "N/A"}</strong></div>
+                <div className="simple-metric-row"><span>PROFIT FACTOR</span><strong>{result?.backtest?.profit_factor || "N/A"}</strong></div>
+                <div className="simple-metric-row"><span>EDGE</span><strong>{result?.backtest?.expectancy ? (parsePercent(result.backtest.expectancy) > 0 ? "POSITIVE" : "NEGATIVE") : "N/A"}</strong></div>
+                <p>Run auto-optimize to see rating, return, drawdown, win rate, and profit factor.</p>
+                <p>No proof. No roundhouse.</p>
+              </div>
+
+              <div className="simple-metric-row simple-agent-current-state"><span>I AM</span><strong>{autonomousMode ? "RUNNING" : "STOPPED"}</strong></div>
+              <div className="simple-metric-row"><span>DECISION</span><strong>{executionStatus.status}</strong></div>
               <div className="simple-metric-row"><span>DID I TRADE?</span><strong>{executionStatus.executed}</strong></div>
-              <div className="simple-metric-row"><span>STATUS</span><strong>{executionStatus.status}</strong></div>
               <div className="simple-metric-row"><span>TX STATUS</span><strong>{simpleTxStatus}</strong></div>
-              <div className="simple-metric-row"><span>SIGNAL ASSET</span><strong>{getSignalAssetLabel()}</strong></div>
-              <div className="simple-metric-row"><span>EXECUTION ROUTE</span><strong>{simpleExecutionRoute}</strong></div>
-              <div className="simple-metric-row"><span>EXECUTION LAYER</span><strong>{executionSource}</strong></div>
-              <div className="simple-metric-row"><span>AGENT WALLET</span><strong>{getSimpleAgentWalletLabel()}</strong></div>
-              <div className="simple-metric-row"><span>AGENT ADDRESS</span><strong>{twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</strong></div>
+              <div className="simple-metric-row"><span>SIGNAL</span><strong>{getSignalAssetLabel()}</strong></div>
+              <div className="simple-metric-row"><span>ROUTE</span><strong>{simpleExecutionRoute}</strong></div>
+              <div className="simple-metric-row"><span>LAYER</span><strong>{executionSource}</strong></div>
+              <div className="simple-metric-row"><span>WALLET</span><strong>{getSimpleAgentWalletLabel()}</strong></div>
+              <div className="simple-metric-row"><span>ADDRESS</span><strong>{twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</strong></div>
               <div className="simple-metric-row"><span>TX HASH</span><strong>{simpleTxHash}</strong></div>
               {tradePlan && (
-                <div className="simple-metric-row"><span>REQUESTED SIZE</span><strong>{tradePlan.requested_trade_size ?? tradeSize} {tradePlan.requested_trade_size_token || coin}</strong></div>
+                <div className="simple-metric-row"><span>SIZE</span><strong>{tradePlan.requested_trade_size ?? tradeSize} {tradePlan.requested_trade_size_token || coin}</strong></div>
               )}
 
               <div className="simple-message-box">
@@ -2557,22 +2580,20 @@ No edge. No roundhouse.
               </div>
             </div>
 
-            {agentResult && (
-              <details className="retro-window">
-                <summary>ON-CHAIN VERIFICATION</summary>
-                <div className="metrics strategy-library-box verification-panel">
-                  <p><strong>ON-CHAIN VERIFICATION</strong></p>
-                  <p>AGENT ADDRESS........ {shortenAddress(twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C")}</p>
-                  <p>SELECTED ASSET..... {coin}</p>
-                  <p>TOKEN STATUS....... {coin} / CMC-LISTED ASSET</p>
-                  <p>NETWORK............ BNB SMART CHAIN</p>
-                  <p>LAST TX HASH....... {getLatestLiveTxHash() || "NO LIVE TX HASH STORED YET"}</p>
-                  {getLatestLiveTxHash() && (
-                    <p>BSCSCAN............ https://bscscan.com/tx/{getLatestLiveTxHash()}</p>
-                  )}
-                </div>
-              </details>
-            )}
+            <details className="retro-window" open>
+              <summary>ON-CHAIN VERIFICATION</summary>
+              <div className="metrics strategy-library-box verification-panel">
+                <p><strong>ON-CHAIN VERIFICATION</strong></p>
+                <p>AGENT ADDRESS........ {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
+                <p>SELECTED ASSET....... {coin}</p>
+                <p>TOKEN STATUS......... {coin} / CMC-LISTED ASSET</p>
+                <p>NETWORK.............. BNB SMART CHAIN</p>
+                <p>LAST TX HASH......... {getLatestLiveTxHash() || "NO LIVE TX HASH STORED YET"}</p>
+                {getLatestLiveTxHash() && (
+                  <p>BSCSCAN.............. https://bscscan.com/tx/{getLatestLiveTxHash()}</p>
+                )}
+              </div>
+            </details>
           </div>
         </section>
 
@@ -2604,6 +2625,25 @@ No edge. No roundhouse.
                 <p>No confidence. No trade.</p>
                 <p>No logic. No trade.</p>
                 <p>No dojo. No roundhouse.</p>
+              </div>
+            </details>
+
+            <details className="retro-window" open>
+              <summary>JUDGE SNAPSHOT / PROOF FIRST</summary>
+              <div className="metrics strategy-library-box">
+                <p><strong>WHAT AM I DOING NOW?</strong></p>
+                <p>AGENT STATUS........ {getAgentRuntimeStatusLabel()}</p>
+                <p>MODE................ {getExecutionModeLabel()}</p>
+                <p>LAST DECISION....... {getExecutionAction()}</p>
+                <p>ACTIVE STRATEGY..... {getActiveStrategyLabel()}</p>
+                <p>STRATEGY RATING..... {result ? `${getOverallRating()} — ${getRatingExplanation()}` : "WAITING"}</p>
+                <p>BACKTEST RETURN..... {result?.backtest?.net_return || "WAITING"}</p>
+                <p>MAX DRAWDOWN........ {result?.backtest?.max_drawdown || "WAITING"}</p>
+                <p>WIN RATE............ {result?.backtest?.win_rate || "WAITING"}</p>
+                <p>PROFIT FACTOR....... {result?.backtest?.profit_factor || "WAITING"}</p>
+                <p>RISK PROFILE........ {getRiskProfileLabel(risk)}</p>
+                <p>RISK STATUS......... {agentResult?.risk_control?.status || "WAITING"}</p>
+                <p>TERMINAL COMMENT.... {getFullTerminalComment()}</p>
               </div>
             </details>
 
@@ -2644,7 +2684,7 @@ No edge. No roundhouse.
                 <p>AGENT NETWORK...... {getAgentNetworkLabel()}</p>
                 <p>AGENT BNB BALANCE.... {getBnbBalanceLabel()}</p>
                 <p>AGENT TOTAL VALUE.... {formatMoney(portfolio?.totalUsdValue || 0)}</p>
-                <p>AGENT ADDRESS........ {shortenAddress(twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C")}</p>
+                <p>AGENT ADDRESS: {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
                 <p>SELECTED TIMEFRAME.. {timeframe}</p>
                 <p>SIGNAL ASSET........ {getSignalAssetLabel()}</p>
                 <p>TRADE SIZE.......... {tradeSize} {getSignalAssetLabel()} TARGET</p>
@@ -2825,7 +2865,7 @@ No edge. No roundhouse.
                   <select value={risk} disabled={loading} onChange={(e) => handleManualSetupChange({ risk: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
                     <option value="low">CONSERVATIVE</option>
                     <option value="medium">BALANCED</option>
-                    <option value="high">AGGRESSIVE</option>
+                    <option value="high">AGGRESSIVE / GOVERNED</option>
                   </select>
                 </div>
 
@@ -2898,6 +2938,15 @@ No edge. No roundhouse.
             </details>
 
             <details className="retro-window">
+              <summary>TIMING LOGIC</summary>
+              <div className="metrics strategy-library-box">
+                <p>I can check every {autonomousInterval} minutes, but I only act when the selected strategy has confirmed. If the setup is based on a closed {timeframe} candle, I wait for that close before approving a trade.</p>
+                <br />
+                <p>Terminal note: the candle is not worthy until the rules say so.</p>
+              </div>
+            </details>
+
+            <details className="retro-window">
               <summary>AUTONOMOUS STATUS</summary>
               <div className="autonomous-container">
                 <div className="autonomous-status-box">
@@ -2906,6 +2955,7 @@ No edge. No roundhouse.
                   <p>LAST DECISION....... {autonomousStatus?.last_decision || "N/A"}</p>
                   <p>LAST REASON......... {autonomousStatus?.last_reason || "N/A"}</p>
                   <p>NEXT CHECK.......... {formatDateTime(autonomousStatus?.next_run)}</p>
+                  <p>TRADE TIMING........ CHECKS EVERY {autonomousInterval} MINUTES / ACTS ON CONFIRMED {timeframe} STRATEGY CANDLES</p>
                 </div>
               </div>
             </details>
@@ -3504,13 +3554,8 @@ No edge. No roundhouse.
 
       <div className="hero-description">
         I Know Quant Fu is an AI trading agent that tests crypto strategies, reads market
-        conditions, controls risk, and explains every decision before a trade is simulated,
+        conditions, controls risk, and explains every decision before anything is simulated,
         paper traded, or executed.
-        <br />
-        <br />
-        <strong>POWER STACK</strong>
-        <br />
-        CoinMarketCap → Strategy Engine → Risk Governor → TWAK → PancakeSwap → BNB Smart Chain
       </div>
 
 {(() => {
@@ -3521,22 +3566,21 @@ No edge. No roundhouse.
       <div className="panel-title">CURRENT AGENT STATE</div>
 
       <div className="metrics strategy-library-box">
-        <p><strong>CURRENT DECISION</strong></p>
-        <p>SIGNAL.............. {getExecutionAction()}</p>
-        <p>MODE................ {getExecutionModeLabel()}</p>
-        <p>ACTIVE STRATEGY..... {getActiveStrategyLabel()}</p>
-        <p>REASON.............. {executionStatus.reason}</p>
-        <p>ACTION TAKEN........ {didExecuteTrade() ? "LIVE TRADE EXECUTED" : agentResult?.execution_result ? "EXECUTION CHECKED" : "NONE"}</p>
-        <p>TRADE EXECUTED...... {executionStatus.executed}</p>
-        <br />
-        <p><strong>{getFullTerminalComment()}</strong></p>
+        <p>SIGNAL: {getExecutionAction()}</p>
+        <p>MODE: {getExecutionModeLabel()}</p>
+        <p>STRATEGY: {getActiveStrategyLabel()}</p>
+        <p>STATUS: {executionStatus.status}</p>
+        <p>TRADE EXECUTED: {executionStatus.executed}</p>
+        <p>NEXT ACTION: {executionStatus.nextAction}</p>
+        <p>TERMINAL COMMENT: {getFullTerminalComment()}</p>
+        <p>REASON: {executionStatus.reason}</p>
       </div>
     </div>
   );
 })()}
 
 <div className="panel">
-        <div className="panel-title">QUICK START ACTIONS</div>
+        <div className="panel-title">QUICK START</div>
 
 <div className="agent-control-panel">
   <button
@@ -3599,6 +3643,11 @@ No edge. No roundhouse.
       : "> STOP AGENT <"}
   </button>
 </div>
+
+<div className="metrics strategy-library-box" style={{ marginTop: "18px" }}>
+  <p>AUTONOMOUS: {autonomousMode ? "RUNNING" : "STOPPED"}</p>
+  <p>CHECK INTERVAL: {autonomousInterval} MINUTES</p>
+</div>
       </div>
 
 
@@ -3655,7 +3704,7 @@ No edge. No roundhouse.
             <select value={risk} disabled={loading} onChange={(e) => handleManualSetupChange({ risk: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
               <option value="low">CONSERVATIVE</option>
               <option value="medium">BALANCED</option>
-              <option value="high">AGGRESSIVE</option>
+              <option value="high">AGGRESSIVE / GOVERNED</option>
             </select>
           </div>
 
@@ -3822,29 +3871,23 @@ No edge. No roundhouse.
   <div className="panel full-strategy-assessment-panel">
     <div className="panel-title">STRATEGY PROOF</div>
 
-    <h2 style={{ marginTop: "8px" }}>STRATEGY ASSESSMENT</h2>
-
     <div className="metrics">
-      <p>STRATEGY............ {result.selected_strategy}</p>
-      <p>STATUS.............. {isApproved() ? "APPROVED" : "REJECTED"}</p>
-      <p>RATING.............. {getOverallRating()}</p>
-      <p>RATING BASIS........ {getRatingExplanation()}</p>
-      <p>RETURN.............. {result.backtest.net_return}</p>
-      <p>MAX DRAWDOWN........ {result.backtest.max_drawdown}</p>
-      <p>WIN RATE............ {result.backtest.win_rate}</p>
-      <p>PROFIT FACTOR....... {result.backtest.profit_factor}</p>
-      <p>EXPECTANCY.......... {result.backtest.expectancy}</p>
-      <p>EDGE................ {parsePercent(result.backtest.expectancy) > 0 ? "POSITIVE" : "NEGATIVE"}</p>
-      <p>BUY & HOLD.......... {parsePercent(result.backtest.strategy_vs_buy_hold) > 0 ? "OUTPERFORMED" : "UNDERPERFORMED"}</p>
+      <p>STRATEGY: {result.selected_strategy}</p>
+      <p>STATUS: {isApproved() ? "APPROVED" : "REJECTED"}</p>
+      <p>RATING: {getOverallRating()}</p>
+      <p>RETURN: {result.backtest.net_return}</p>
+      <p>MAX DRAWDOWN: {result.backtest.max_drawdown}</p>
+      <p>WIN RATE: {result.backtest.win_rate}</p>
+      <p>PROFIT FACTOR: {result.backtest.profit_factor}</p>
+      <p>EDGE: {parsePercent(result.backtest.expectancy) > 0 ? "POSITIVE" : "NEGATIVE"}</p>
       <br />
-      <p><strong>BACKTESTED BEFORE THE DOJO OPENS.</strong></p>
+      <p>Run auto-optimize to show strategy rating, return, drawdown, win rate, and profit factor.</p>
     </div>
   </div>
 )}
 
 <div className="panel decision-section-panel">
-  <div className="panel-title">AGENT DECISION ENGINE</div>
-<h2 className="strategy-library-title">AGENT STATUS</h2>
+  <div className="panel-title">WALLET + RISK STATE</div>
 
 <div className="metrics strategy-library-box">
   <p>AGENT STATUS....... {getAgentRuntimeStatusLabel()}</p>
@@ -3864,9 +3907,7 @@ No edge. No roundhouse.
     AGENT TOTAL VALUE.... {formatMoney(portfolio?.totalUsdValue || 0)}
   </p>
 
-  <p>AGENT START VALUE... {getPortfolioStartValueLabel()}</p>
-
-  <p>AGENT ADDRESS........ {shortenAddress(twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C")}</p>
+  <p>AGENT ADDRESS........ {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
   <p>SELECTED TIMEFRAME.. {timeframe}</p>
   <p>SIGNAL ASSET........ {getSignalAssetLabel()}</p>
   <p>TRADE SIZE.......... {tradeSize} {getSignalAssetLabel()} TARGET</p>
@@ -4510,7 +4551,7 @@ const isRealTrade = tradeTypeLabel === "REAL TRADE / EXECUTION";
 
 
       <div className="footer">
-        SYSTEM HEALTH &nbsp;&nbsp; CMC AGENT HUB: OK &nbsp;&nbsp; TWAK: OK &nbsp;&nbsp; PANCAKESWAP: OK &nbsp;&nbsp; BNB CHAIN: OK &nbsp;&nbsp; BACKTEST ENGINE: OK &nbsp;&nbsp; OPTIMIZER: OK
+        SYSTEM HEALTH // CMC AGENT HUB: OK // TWAK: OK // PANCAKESWAP: OK // BNB CHAIN: OK // BACKTEST ENGINE: OK // OPTIMIZER: OK
       </div>
       </main>
     </div>
