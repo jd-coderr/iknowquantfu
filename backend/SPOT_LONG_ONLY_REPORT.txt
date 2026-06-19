@@ -1,0 +1,30 @@
+IKQF SPOT LONG-ONLY / REDUCE-ONLY FIX
+
+Reason:
+The backend previously treated strategy SHORT signals as direct selected-asset -> USDT trades. That is not a true short. In a spot wallet, the agent cannot profit from a short unless it already holds the asset, or unless it uses margin/perpetuals, which this TWAK/PancakeSwap spot swap setup does not.
+
+Fixes made in app.py:
+1. Strategy LONG signal:
+   USDT -> selected asset.
+
+2. Strategy SHORT signal:
+   If the wallet holds the selected asset:
+     selected asset -> USDT as a reduce-risk / exit trade.
+   If the wallet does not hold the selected asset:
+     HOLD, with a clear reason explaining that no synthetic short is possible in a spot wallet.
+
+3. Daily UTC qualification guard:
+   Primary path is USDT -> selected asset.
+   It can sell selected asset -> USDT only if the wallet already holds that selected asset.
+   It no longer uses BNB as a fallback trading asset.
+   BNB is preserved for gas.
+
+4. Response/logging:
+   The agent result now includes a clearer reason for HOLD when a sell/reduce signal appears but the wallet has no selected asset position.
+
+Trade model after this fix:
+- Long entry: USDT -> ETH/LINK/etc.
+- Exit/reduce: ETH/LINK/etc. -> USDT.
+- No synthetic shorts.
+- No margin/perpetual shorts.
+- BNB is gas reserve, not a fallback trade asset.
