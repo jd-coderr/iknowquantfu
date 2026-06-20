@@ -1,215 +1,157 @@
-"""CoinMarketCap x402 paid market-data client.
+import { createX402AxiosClient } from "@x402/axios";
+import { ExactEvmScheme, toClientEvmSigner } from "@x402/evm";
+import { privateKeyToAccount } from "viem/accounts";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
 
-This module is intentionally optional and safe by default. It only spends USDC
-when X402_ENABLED=true and X402_EVM_PRIVATE_KEY or EVM_PRIVATE_KEY is set.
-If disabled or misconfigured, the normal CMC API flow still works and the agent
-returns an x402 status object explaining what is missing.
-"""
+const CMC_X402_QUOTES_URL =
+  "https://pro-api.coinmarketcap.com/x402/v3/cryptocurrency/quotes/latest";
 
-from __future__ import annotations
+function normalizePrivateKey(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  return trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
+}
 
-import os
-from datetime import datetime, timezone
-from typing import Any
+function normalizeSymbol(value) {
+  return (
+    String(value || "ETH")
+      .toUpperCase()
+      .replace("USDT", "")
+      .replace("/", "")
+      .replace("-", "")
+      .trim() || "ETH"
+  );
+}
 
-CMC_X402_QUOTES_URL = "https://pro-api.coinmarketcap.com/x402/v3/cryptocurrency/quotes/latest"
-X402_PAYMENT_NETWORK = "Base"
-X402_PAYMENT_CHAIN_ID = 8453
-X402_PAYMENT_ASSET = "USDC"
-X402_EXPECTED_PRICE_USD = "0.01"
+function extractPrice(payload, symbol) {
+  try {
+    const data = payload?.data || {};
+    const coinData = data[symbol] || data[symbol.toUpperCase()] || Object.values(data)[0];
+    const price = coinData?.quote?.USD?.price;
+    return typeof price === "number" ? price : Number(price);
+  } catch {
+    return null;
+  }
+}
 
-
-def env_flag(name: str, default: str = "false") -> bool:
-    return str(os.getenv(name, default)).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def normalize_symbol(coin: str) -> str:
-    symbol = str(coin or "ETH").upper().replace("USDT", "").replace("/", "").replace("-", "").strip()
-    return symbol or "ETH"
-
-
-def _safe_payment_settlement(value: Any) -> Any:
-    """Return payment-settlement proof without exposing signatures/private data."""
-    if value is None:
-        return None
-
-    try:
-        if isinstance(value, dict):
-            redacted = {}
-            for key, item in value.items():
-                key_text = str(key).lower()
-                if any(secret_word in key_text for secret_word in ("signature", "authorization", "payload", "token", "private")):
-                    redacted[key] = "REDACTED"
-                else:
-                    redacted[key] = item
-            return redacted
-    except Exception:
-        pass
-
-    text = str(value)
-    if len(text) > 500:
-        return text[:500] + "..."
-    return text
-
-
-def extract_cmc_price(payload: dict, symbol: str) -> float | None:
-    try:
-        data = payload.get("data") or {}
-        coin_data = data.get(symbol) or data.get(symbol.upper()) or next(iter(data.values()))
-        price = coin_data["quote"]["USD"]["price"]
-        return float(price)
-    except Exception:
-        return None
-
-
-def get_cmc_x402_quote(coin: str = "ETH") -> dict:
-    """Pay for a CMC quote through x402 and return judge-friendly proof.
-
-    Required Railway/backend env vars for real paid mode:
-    - X402_ENABLED=true
-    - X402_EVM_PRIVATE_KEY or EVM_PRIVATE_KEY: Base wallet private key with USDC and ETH.
-
-    This does not use a CMC API key. The x402 payment is the access mechanism.
-    """
-    symbol = normalize_symbol(coin)
-    x402_enabled = env_flag("X402_ENABLED", "false")
-    private_key = os.getenv("X402_EVM_PRIVATE_KEY") or os.getenv("EVM_PRIVATE_KEY")
-
-    proof = {
-        "enabled": x402_enabled,
-        "configured": bool(private_key),
-        "success": False,
-        "paid": False,
-        "used_in_decision": False,
-        "provider": "CoinMarketCap",
-        "protocol": "x402",
-        "endpoint": CMC_X402_QUOTES_URL,
-        "tool": "cryptocurrency quotes latest",
-        "symbol": symbol,
-        "payment_network": X402_PAYMENT_NETWORK,
-        "payment_chain_id": X402_PAYMENT_CHAIN_ID,
-        "payment_asset": X402_PAYMENT_ASSET,
-        "expected_price_usd": X402_EXPECTED_PRICE_USD,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+function safeHeaders(headers) {
+  const output = {};
+  for (const [key, value] of Object.entries(headers || {})) {
+    const lower = String(key).toLowerCase();
+    if (
+      lower === "authorization" ||
+      lower === "payment" ||
+      lower === "payment-signature" ||
+      lower === "x-api-key" ||
+      lower === "cookie" ||
+      lower === "set-cookie"
+    ) {
+      output[key] = "REDACTED";
+    } else {
+      output[key] = value;
     }
+  }
+  return output;
+}
 
-    if not x402_enabled:
-        return {
-            **proof,
-            "status": "disabled",
-            "message": "Set X402_ENABLED=true to allow paid CMC x402 requests. Disabled mode spends no USDC.",
-        }
+async function main() {
+  const symbol = normalizeSymbol(process.argv[2] || "ETH");
+  const privateKey = normalizePrivateKey(
+    process.env.X402_EVM_PRIVATE_KEY || process.env.EVM_PRIVATE_KEY
+  );
 
-    if not private_key:
-        return {
-            **proof,
-            "status": "not_configured",
-            "message": "Set X402_EVM_PRIVATE_KEY or EVM_PRIVATE_KEY with a Base wallet funded with USDC and ETH.",
-        }
+  if (!privateKey) {
+    console.log(
+      JSON.stringify({
+        success: false,
+        paid: false,
+        used_in_decision: false,
+        status: "not_configured",
+        message: "Missing X402_EVM_PRIVATE_KEY or EVM_PRIVATE_KEY",
+        symbol,
+      })
+    );
+    process.exit(0);
+  }
 
-    try:
-        from eth_account import Account
-        from x402 import x402ClientSync
-        from x402.http import x402HTTPClientSync
-        from x402.http.clients import x402_requests
-        from x402.mechanisms.evm import EthAccountSigner
-        from x402.mechanisms.evm.exact.register import register_exact_evm_client
-    except Exception as error:
-        return {
-            **proof,
-            "status": "missing_dependency",
-            "message": "Install x402[requests] and eth-account in requirements.txt.",
-            "error": str(error),
-        }
+  const account = privateKeyToAccount(privateKey);
 
-    try:
-        client = x402ClientSync()
-        account = Account.from_key(private_key)
-        register_exact_evm_client(client, EthAccountSigner(account))
-        http_client = x402HTTPClientSync(client)
+  const publicClient = createPublicClient({
+    chain: base,
+    transport: http(),
+  });
 
-        with x402_requests(client) as session:
-            response = session.get(
-                CMC_X402_QUOTES_URL,
-                params={"symbol": symbol},
-                timeout=30,
-            )
+  const signer = toClientEvmSigner(account, publicClient);
 
-            try:
-                payload = response.json() if response.text else {}
-            except Exception:
-                payload = {"raw_response": response.text[:500]}
+  const client = createX402AxiosClient({
+    schemes: [new ExactEvmScheme(signer)],
+  });
 
-            settle_response = None
+  try {
+    const response = await client.get(CMC_X402_QUOTES_URL, {
+      params: { symbol },
+      timeout: 30000,
+    });
 
-            if response.ok:
-                try:
-                    settle_response = http_client.get_payment_settle_response(
-                        lambda name: response.headers.get(name)
-                    )
-                except Exception as settle_error:
-                    settle_response = {"settlement_parse_error": str(settle_error)}
+    const priceUsd = extractPrice(response.data, symbol);
+    const success = Boolean(response.status === 200 && priceUsd);
 
-            price_usd = extract_cmc_price(payload, symbol)
-            success = bool(response.ok and price_usd is not None)
+    console.log(
+      JSON.stringify({
+        success,
+        paid: response.status === 200,
+        used_in_decision: success,
+        status: response.status === 200 ? "paid" : "request_failed",
+        http_status: response.status,
+        symbol,
+        price_usd: priceUsd,
+        provider: "CoinMarketCap",
+        protocol: "x402",
+        endpoint: CMC_X402_QUOTES_URL,
+        payment_network: "Base",
+        payment_chain_id: 8453,
+        payment_asset: "USDC",
+        expected_price_usd: "0.01",
+        wallet_address: account.address,
+        payment_response_header_present: Boolean(
+          response.headers?.["payment-response"] ||
+            response.headers?.["x-payment-response"]
+        ),
+        response_headers: safeHeaders(response.headers),
+        message:
+          response.status === 200
+            ? "CMC x402 quote paid and returned successfully through TypeScript SDK."
+            : "CMC x402 request returned non-200 status.",
+      })
+    );
+  } catch (error) {
+    const status = error?.response?.status || null;
+    const data = error?.response?.data || null;
+    const headers = error?.response?.headers || null;
 
-            safe_headers = {
-                key: value
-                for key, value in dict(response.headers).items()
-                if key.lower() not in {
-                    "authorization",
-                    "payment",
-                    "payment-signature",
-                    "x-api-key",
-                    "cookie",
-                    "set-cookie",
-                }
-            }
+    console.log(
+      JSON.stringify({
+        success: false,
+        paid: false,
+        used_in_decision: false,
+        status: "error",
+        http_status: status,
+        symbol,
+        provider: "CoinMarketCap",
+        protocol: "x402",
+        endpoint: CMC_X402_QUOTES_URL,
+        payment_network: "Base",
+        payment_chain_id: 8453,
+        payment_asset: "USDC",
+        expected_price_usd: "0.01",
+        wallet_address: account.address,
+        response_body_preview: data,
+        response_headers: safeHeaders(headers),
+        message: error?.message || "CMC x402 TypeScript request failed.",
+      })
+    );
+  }
+}
 
-            response_body_preview = payload
-            if isinstance(response_body_preview, dict):
-                response_body_preview = {
-                    key: value
-                    for key, value in response_body_preview.items()
-                    if str(key).lower() not in {
-                        "authorization",
-                        "payment",
-                        "payment-signature",
-                        "signature",
-                        "private_key",
-                        "token",
-                    }
-                }
-
-            return {
-                **proof,
-                "enabled": True,
-                "configured": True,
-                "success": success,
-                "paid": bool(response.ok),
-                "used_in_decision": success,
-                "status": "paid" if response.ok else "request_failed",
-                "http_status": response.status_code,
-                "price_usd": price_usd,
-                "payment_response": _safe_payment_settlement(settle_response),
-                "payment_response_header_present": bool(response.headers.get("PAYMENT-RESPONSE")),
-                "response_headers": safe_headers,
-                "response_body_preview": response_body_preview,
-                "message": (
-                    "CMC x402 quote paid and used in the agent decision."
-                    if success
-                    else "CMC x402 request returned but no usable USD price was parsed."
-                    if response.ok
-                    else "CMC x402 request failed. Inspect response_headers and response_body_preview."
-                ),
-            }
-
-    except Exception as error:
-        return {
-            **proof,
-            "enabled": True,
-            "configured": True,
-            "status": "error",
-            "message": "CMC x402 paid request failed.",
-            "error": str(error),
-        }
+main();
