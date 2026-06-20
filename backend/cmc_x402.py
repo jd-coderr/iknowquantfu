@@ -153,6 +153,34 @@ def get_cmc_x402_quote(coin: str = "ETH") -> dict:
             price_usd = extract_cmc_price(payload, symbol)
             success = bool(response.ok and price_usd is not None)
 
+            safe_headers = {
+                key: value
+                for key, value in dict(response.headers).items()
+                if key.lower() not in {
+                    "authorization",
+                    "payment",
+                    "payment-signature",
+                    "x-api-key",
+                    "cookie",
+                    "set-cookie",
+                }
+            }
+
+            response_body_preview = payload
+            if isinstance(response_body_preview, dict):
+                response_body_preview = {
+                    key: value
+                    for key, value in response_body_preview.items()
+                    if str(key).lower() not in {
+                        "authorization",
+                        "payment",
+                        "payment-signature",
+                        "signature",
+                        "private_key",
+                        "token",
+                    }
+                }
+
             return {
                 **proof,
                 "enabled": True,
@@ -165,12 +193,14 @@ def get_cmc_x402_quote(coin: str = "ETH") -> dict:
                 "price_usd": price_usd,
                 "payment_response": _safe_payment_settlement(settle_response),
                 "payment_response_header_present": bool(response.headers.get("PAYMENT-RESPONSE")),
+                "response_headers": safe_headers,
+                "response_body_preview": response_body_preview,
                 "message": (
                     "CMC x402 quote paid and used in the agent decision."
                     if success
                     else "CMC x402 request returned but no usable USD price was parsed."
                     if response.ok
-                    else "CMC x402 request failed."
+                    else "CMC x402 request failed. Inspect response_headers and response_body_preview."
                 ),
             }
 
