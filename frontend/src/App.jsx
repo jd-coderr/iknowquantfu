@@ -2597,7 +2597,7 @@ async function loadTradeHistory() {
                   to wait, simulate, paper trade, or execute.
                 </p>
               </div>
-
+             </div> 
                 <div className="metrics retro-mini-window detailed-human-translation">
                 <p>I Know Quant Fu turns noisy crypto market data into explainable autonomous trading decisions.</p>
                 <br />
