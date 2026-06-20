@@ -113,7 +113,7 @@ STRATEGY_FILES = [
 
 AUTONOMOUS_STATE = {
     "running": False,
-    "interval_minutes": 5,
+    "interval_minutes": 1,
     "last_run": None,
     "next_run": None,
     "last_decision": None,
@@ -137,7 +137,7 @@ def get_default_agent_setup():
         "live_execution": False,
         "execution_mode": "decision_simulation",
         "trade_size": 0.001,
-        "interval_minutes": 5,
+        "interval_minutes": 1,
         "selected_strategy": None,
         "result_snapshot": None,
         "optimization": None,
@@ -235,6 +235,7 @@ def get_autonomous_config_snapshot():
         "live_execution": AUTONOMOUS_CONFIG.live_execution,
         "execution_mode": AUTONOMOUS_CONFIG.execution_mode,
         "trade_size": AUTONOMOUS_CONFIG.trade_size,
+        "interval_minutes": AUTONOMOUS_CONFIG.interval_minutes,
         "selected_strategy": AUTONOMOUS_CONFIG.selected_strategy,
     }
 
@@ -308,7 +309,7 @@ class AgentCycleRequest(BaseModel):
     live_execution: bool = False
     execution_mode: str = "decision_simulation"
     trade_size: float = 0.001
-    interval_minutes: int = 5
+    interval_minutes: int = 1
     selected_strategy: str | None = None
 
 class AutonomousRequest(BaseModel):
@@ -320,7 +321,7 @@ class AutonomousRequest(BaseModel):
     execution_mode: str = "decision_simulation"
     trade_size: float = 0.001
     selected_strategy: str | None = None
-    interval_minutes: int = 5
+    interval_minutes: int = 1
     result_snapshot: dict | None = None
     optimization: dict | None = None
     setup_source: str | None = None
@@ -1965,7 +1966,11 @@ def update_autonomous_state_from_result(result):
 
 
 def autonomous_loop():
-    while AUTONOMOUS_STATE["running"]:
+    while True:
+        if not AUTONOMOUS_STATE["running"]:
+            time.sleep(1)
+            continue
+
         try:
             result = agent_cycle(AUTONOMOUS_CONFIG, True)
             update_autonomous_state_from_result(result)
@@ -1976,7 +1981,15 @@ def autonomous_loop():
                 "error": str(error),
             })
 
-        time.sleep(AUTONOMOUS_STATE["interval_minutes"] * 60)
+        interval_minutes = max(1, int(AUTONOMOUS_STATE.get("interval_minutes", 1) or 1))
+        seconds_remaining = interval_minutes * 60
+
+        while seconds_remaining > 0:
+            if not AUTONOMOUS_STATE["running"]:
+                break
+
+            time.sleep(1)
+            seconds_remaining -= 1
 
 @app.post("/autonomous/start")
 def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(require_operator_key)):
@@ -1984,6 +1997,7 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
     global AUTONOMOUS_CONFIG
 
     now = datetime.now(timezone.utc)
+    interval_minutes = max(1, int(request.interval_minutes or 1))
 
     AUTONOMOUS_CONFIG = AgentCycleRequest(
         coin=request.coin,
@@ -1993,12 +2007,12 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         live_execution=request.live_execution,
         execution_mode=request.execution_mode,
         trade_size=request.trade_size,
-        interval_minutes=request.interval_minutes,
+        interval_minutes=interval_minutes,
         selected_strategy=request.selected_strategy,
     )
 
     AUTONOMOUS_STATE["running"] = True
-    AUTONOMOUS_STATE["interval_minutes"] = request.interval_minutes
+    AUTONOMOUS_STATE["interval_minutes"] = interval_minutes
     AUTONOMOUS_STATE["last_run"] = None
     AUTONOMOUS_STATE["next_run"] = now.isoformat()
     AUTONOMOUS_STATE["last_decision"] = None
@@ -2013,7 +2027,7 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         live_execution=request.live_execution,
         execution_mode=request.execution_mode,
         trade_size=request.trade_size,
-        interval_minutes=request.interval_minutes,
+        interval_minutes=interval_minutes,
         selected_strategy=request.selected_strategy,
         result_snapshot=request.result_snapshot,
         optimization=request.optimization,
@@ -2031,7 +2045,7 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         "success": True,
         "mode": "autonomous",
         "status": "running",
-        "interval_minutes": request.interval_minutes,
+        "interval_minutes": interval_minutes,
         "trade_size": request.trade_size,
         "execution_mode": request.execution_mode,
         "active_config": get_autonomous_config_snapshot(),
