@@ -2582,7 +2582,8 @@ async function loadTradeHistory() {
             {renderDetailedExpandButton("who")}
           </div>
 
-              <div className="simple-quadrant-body">
+          <div className="retro-quadrant-body">
+            <div className="simple-quadrant-body">
               <div className="simple-brand-block">
                 <p className="simple-kicker">IKQF v0.1.0 — AI ONLINE</p>
                 <h1 className="simple-square-title">
@@ -2597,15 +2598,15 @@ async function loadTradeHistory() {
                   to wait, simulate, paper trade, or execute.
                 </p>
               </div>
-             </div> 
-                <div className="metrics retro-mini-window detailed-human-translation">
-                <p>I Know Quant Fu turns noisy crypto market data into explainable autonomous trading decisions.</p>
-                <br />
-                <p><strong>Translation for humans:</strong></p>
-                <p>I do not chase candles.</p>
-                <p>I do not panic-click green buttons.</p>
-                <p>I test the signal before I enter the dojo.</p>
-              </div>
+            </div>
+
+            <div className="metrics retro-mini-window detailed-human-translation">
+              <p>I Know Quant Fu turns noisy crypto market data into explainable autonomous trading decisions.</p>
+              <br />
+              <p><strong>Translation for humans:</strong></p>
+              <p>I do not chase candles.</p>
+              <p>I do not panic-click green buttons.</p>
+              <p>I test the signal before I enter the dojo.</p>
             </div>
 
             <details className="retro-window" open>
