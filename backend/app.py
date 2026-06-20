@@ -1,5 +1,6 @@
 from position_sizing import calculate_trade_size
 from cmc_skill_hub import find_cmc_skill
+from cmc_x402 import get_cmc_x402_quote
 from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from twak_executor import run_twak_swap, run_twak_portfolio
@@ -1465,6 +1466,11 @@ def register_agent():
 async def cmc_skill_hub_find(query: str = "btc price"):
     return await find_cmc_skill(query)
 
+@app.get("/x402-status")
+def x402_status(coin: str = "ETH", _operator_ok: bool = Depends(require_operator_key)):
+    # Protected because a successful request costs USDC.
+    return get_cmc_x402_quote(coin)
+
 
 @app.get("/debug-strategies")
 def debug_strategies():
@@ -1481,6 +1487,21 @@ def debug_strategies():
 @app.post("/agent-cycle")
 def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require_operator_key)):
     cmc_signal = get_cmc_signal(request.coin)
+
+    # x402 proof: pay for a CMC quote inside the real agent cycle when X402_ENABLED=true.
+    # If enabled and successful, the paid quote becomes the price used by the trade/risk logic.
+    # If disabled, misconfigured, or unavailable, the existing CMC API signal remains the fallback.
+    x402_market_data = get_cmc_x402_quote(request.coin)
+    cmc_signal["x402"] = x402_market_data
+
+    if x402_market_data.get("success") and x402_market_data.get("price_usd") is not None:
+        cmc_signal["price_usd"] = x402_market_data["price_usd"]
+        cmc_signal["x402_used_in_decision"] = True
+        cmc_signal["market_data_payment_layer"] = "CoinMarketCap x402 paid quote"
+    else:
+        cmc_signal["x402_used_in_decision"] = False
+        cmc_signal["market_data_payment_layer"] = "CMC API fallback; x402 not paid/available"
+
     execution_mode = str(getattr(request, "execution_mode", "decision_simulation") or "decision_simulation").lower()
     live_execution_enabled = execution_mode == "live_trading" or request.live_execution is True
     paper_trading_enabled = execution_mode == "paper_trading"
@@ -1520,6 +1541,7 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                 "timeframe": request.timeframe,
                 "risk": request.risk,
                 "cmc_signal": cmc_signal,
+                "x402": x402_market_data,
             }
         )
 
@@ -1527,6 +1549,8 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
             "success": False,
             "decision": "HOLD",
             "reason": "No valid strategy was generated.",
+            "cmc_signal": cmc_signal,
+            "x402": x402_market_data,
             "event": event,
         }
 
@@ -1775,6 +1799,7 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                         chain="bsc",
                         slippage="1",
                         quote_only=trade_plan["quote_only"],
+                        password=os.getenv("TWAK_WALLET_PASSWORD"),
                     )
                     execution_result = attach_tx_hash(execution_result)
                     execution_result["mode"] = "quote_only" if trade_plan["quote_only"] else "live_execution"
@@ -1816,6 +1841,17 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         risk_control=risk_control,
     )
 
+    if x402_market_data.get("success"):
+        agent_analysis["why"].append(
+            f"CMC x402 paid market-data request succeeded for {x402_market_data.get('symbol')} "
+            "and its quote was used in this decision."
+        )
+    else:
+        agent_analysis["why"].append(
+            f"CMC x402 payment layer status: {x402_market_data.get('status')}. "
+            "Existing CMC API data was used as fallback."
+        )
+
     event = log_trade(
         {
             "status": "agent_cycle",
@@ -1827,6 +1863,7 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
             "execution_mode": execution_mode,
             "selected_strategy_requested": request.selected_strategy,
             "cmc_signal": cmc_signal,
+            "x402": x402_market_data,
             "selected_strategy": strategy["name"],
             "risk_adjusted_score": risk_score,
             "backtest": backtest,
@@ -1854,6 +1891,7 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         "execution_mode": execution_mode,
         "coin": request.coin,
         "cmc_signal": cmc_signal,
+        "x402": x402_market_data,
         "selected_strategy_requested": request.selected_strategy,
         "selected_strategy": strategy["name"],
         "risk_adjusted_score": risk_score,
@@ -1907,6 +1945,7 @@ def execute_trade(request: ExecuteTradeRequest, _operator_ok: bool = Depends(req
         chain=request.chain,
         slippage=request.slippage,
         quote_only=request.quote_only,
+        password=os.getenv("TWAK_WALLET_PASSWORD"),
     )
     result = attach_tx_hash(result)
     result["mode"] = "quote_only" if request.quote_only else "live_execution"
