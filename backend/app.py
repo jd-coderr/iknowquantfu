@@ -2212,3 +2212,36 @@ def agent_status():
         "agent_address": status["agent_address"],
         "chain": status["chain"],
     }
+
+@app.get("/x402-wallet")
+def x402_wallet(_operator_ok: bool = Depends(require_operator_key)):
+    try:
+        from eth_account import Account
+
+        private_key = os.getenv("X402_EVM_PRIVATE_KEY") or os.getenv("EVM_PRIVATE_KEY")
+
+        if not private_key:
+            return {
+                "success": False,
+                "configured": False,
+                "message": "No X402_EVM_PRIVATE_KEY or EVM_PRIVATE_KEY configured.",
+            }
+
+        account = Account.from_key(private_key)
+
+        return {
+            "success": True,
+            "configured": True,
+            "address": account.address,
+            "expected_funded_address": "0x209D07E272b8BF4b9B31C8e06f0454236629cd0",
+            "matches_expected": account.address.lower() == "0x209D07E272b8BF4b9B31C8e06f0454236629cd0".lower(),
+            "base_explorer_url": f"https://base.blockscout.com/address/{account.address}",
+        }
+
+    except Exception as error:
+        return {
+            "success": False,
+            "configured": True,
+            "message": "Could not derive x402 wallet address.",
+            "error": str(error),
+        }
