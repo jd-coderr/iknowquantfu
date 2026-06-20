@@ -2582,9 +2582,7 @@ async function loadTradeHistory() {
             {renderDetailedExpandButton("who")}
           </div>
 
-          <div className="retro-quadrant-body">
-            <div className="retro-brand-card">
-
+              <div className="simple-quadrant-body">
               <div className="simple-brand-block">
                 <p className="simple-kicker">IKQF v0.1.0 — AI ONLINE</p>
                 <h1 className="simple-square-title">
@@ -2600,7 +2598,7 @@ async function loadTradeHistory() {
                 </p>
               </div>
 
-              <div className="metrics retro-mini-window detailed-human-translation">
+                <div className="metrics retro-mini-window detailed-human-translation">
                 <p>I Know Quant Fu turns noisy crypto market data into explainable autonomous trading decisions.</p>
                 <br />
                 <p><strong>Translation for humans:</strong></p>
