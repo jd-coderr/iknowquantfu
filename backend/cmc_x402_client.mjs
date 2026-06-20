@@ -1,6 +1,7 @@
 import axios from "axios";
 import { privateKeyToAccount } from "viem/accounts";
-import { wrapAxiosWithPayment } from "@x402/axios";
+import { x402Client, x402HTTPClient } from "@x402/axios";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
 
 const CMC_X402_QUOTES_URL =
   "https://pro-api.coinmarketcap.com/x402/v3/cryptocurrency/quotes/latest";
@@ -22,19 +23,12 @@ function normalizeSymbol(value) {
   );
 }
 
-function headersToObject(headers) {
-  if (!headers) return {};
-  if (typeof headers.toJSON === "function") return headers.toJSON();
-  return Object.fromEntries(Object.entries(headers));
-}
-
 function safeHeaders(headers) {
   const output = {};
-  const headerObject = headersToObject(headers);
+  const source = headers?.toJSON ? headers.toJSON() : Object.fromEntries(Object.entries(headers || {}));
 
-  for (const [key, value] of Object.entries(headerObject)) {
+  for (const [key, value] of Object.entries(source)) {
     const lower = String(key).toLowerCase();
-
     if (
       lower === "authorization" ||
       lower === "payment" ||
@@ -58,12 +52,61 @@ function extractPrice(payload, symbol) {
     const data = payload?.data || {};
     const coinData =
       data[symbol] || data[symbol.toUpperCase()] || Object.values(data)[0];
-
     const price = coinData?.quote?.USD?.price;
     return typeof price === "number" ? price : Number(price);
   } catch {
     return null;
   }
+}
+
+function summarizePaymentRequired(paymentRequired) {
+  return {
+    x402Version: paymentRequired?.x402Version ?? null,
+    resource: paymentRequired?.resource ?? null,
+    accepts_count: Array.isArray(paymentRequired?.accepts)
+      ? paymentRequired.accepts.length
+      : null,
+    accepts: Array.isArray(paymentRequired?.accepts)
+      ? paymentRequired.accepts.map((item) => ({
+          scheme: item?.scheme,
+          network: item?.network,
+          amount: item?.amount,
+          asset: item?.asset,
+          payTo: item?.payTo,
+          maxTimeoutSeconds: item?.maxTimeoutSeconds,
+          extra: item?.extra,
+        }))
+      : null,
+  };
+}
+
+function summarizePaymentPayload(paymentPayload) {
+  const inner = paymentPayload?.payload || {};
+  const permit2 = inner?.permit2Authorization || null;
+  const witness = permit2?.witness || null;
+
+  return {
+    x402Version: paymentPayload?.x402Version ?? null,
+    has_payload: Boolean(paymentPayload?.payload),
+    payload_keys: inner ? Object.keys(inner) : [],
+    has_signature: Boolean(inner?.signature),
+    has_authorization: Boolean(inner?.authorization),
+    has_permit2Authorization: Boolean(permit2),
+    has_permit2_witness: Boolean(witness),
+    permit2_from: permit2?.from || null,
+    permit2_spender: permit2?.spender || null,
+    permit2_permitted: permit2?.permitted || null,
+    permit2_witness: witness || null,
+    accepted: paymentPayload?.accepted
+      ? {
+          scheme: paymentPayload.accepted.scheme,
+          network: paymentPayload.accepted.network,
+          amount: paymentPayload.accepted.amount,
+          asset: paymentPayload.accepted.asset,
+          extra: paymentPayload.accepted.extra,
+        }
+      : null,
+  };
 }
 
 async function main() {
@@ -86,25 +129,88 @@ async function main() {
     process.exit(0);
   }
 
-  const account = privateKeyToAccount(privateKey);
-  const api = wrapAxiosWithPayment(axios.create(), account);
+  const signer = privateKeyToAccount(privateKey);
+  const client = new x402Client();
+  registerExactEvmScheme(client, { signer });
+  const httpClient = new x402HTTPClient(client);
+
+  const api = axios.create({
+    timeout: 30000,
+    validateStatus: () => true,
+  });
+
+  let paymentRequired = null;
+  let paymentPayload = null;
+  let paymentHeaders = null;
 
   try {
-    const response = await api.get(CMC_X402_QUOTES_URL, {
+    const firstResponse = await api.get(CMC_X402_QUOTES_URL, {
       params: { symbol },
-      timeout: 30000,
     });
 
-    const priceUsd = extractPrice(response.data, symbol);
-    const success = Boolean(response.status === 200 && priceUsd);
+    const getHeader = (name) => {
+      const value =
+        firstResponse.headers?.[name] ||
+        firstResponse.headers?.[String(name).toLowerCase()];
+      return typeof value === "string" ? value : undefined;
+    };
+
+    try {
+      paymentRequired = httpClient.getPaymentRequiredResponse(
+        getHeader,
+        firstResponse.data
+      );
+    } catch {
+      if (firstResponse.data?.x402Version) {
+        paymentRequired = firstResponse.data;
+      }
+    }
+
+    if (!paymentRequired) {
+      console.log(
+        JSON.stringify({
+          success: false,
+          paid: false,
+          used_in_decision: false,
+          status: "payment_required_parse_failed",
+          http_status: firstResponse.status,
+          symbol,
+          wallet_address: signer.address,
+          response_body_preview: firstResponse.data,
+          response_headers: safeHeaders(firstResponse.headers),
+          message: "Could not parse CMC x402 payment requirements.",
+        })
+      );
+      process.exit(0);
+    }
+
+    paymentPayload = await client.createPaymentPayload(paymentRequired);
+    paymentHeaders = httpClient.encodePaymentSignatureHeader(paymentPayload);
+
+    const compatibleHeaders = { ...paymentHeaders };
+
+    if (paymentHeaders["PAYMENT-SIGNATURE"] && !compatibleHeaders["X-PAYMENT"]) {
+      compatibleHeaders["X-PAYMENT"] = paymentHeaders["PAYMENT-SIGNATURE"];
+    }
+
+    const paidResponse = await api.get(CMC_X402_QUOTES_URL, {
+      params: { symbol },
+      headers: {
+        ...compatibleHeaders,
+        "Access-Control-Expose-Headers": "PAYMENT-RESPONSE,X-PAYMENT-RESPONSE",
+      },
+    });
+
+    const priceUsd = extractPrice(paidResponse.data, symbol);
+    const success = Boolean(paidResponse.status === 200 && priceUsd);
 
     console.log(
       JSON.stringify({
         success,
-        paid: response.status === 200,
+        paid: paidResponse.status === 200,
         used_in_decision: success,
-        status: response.status === 200 ? "paid" : "request_failed",
-        http_status: response.status,
+        status: paidResponse.status === 200 ? "paid" : "request_failed",
+        http_status: paidResponse.status,
         symbol,
         price_usd: priceUsd,
         provider: "CoinMarketCap",
@@ -114,31 +220,30 @@ async function main() {
         payment_chain_id: 8453,
         payment_asset: "USDC",
         expected_price_usd: "0.01",
-        wallet_address: account.address,
+        wallet_address: signer.address,
+        payment_required_debug: summarizePaymentRequired(paymentRequired),
+        payment_payload_debug: summarizePaymentPayload(paymentPayload),
+        payment_headers_sent: Object.keys(compatibleHeaders),
         payment_response_header_present: Boolean(
-          response.headers?.["payment-response"] ||
-            response.headers?.["x-payment-response"]
+          paidResponse.headers?.["payment-response"] ||
+            paidResponse.headers?.["x-payment-response"]
         ),
-        response_body_preview: response.data,
-        response_headers: safeHeaders(response.headers),
+        response_body_preview: paidResponse.data,
+        response_headers: safeHeaders(paidResponse.headers),
         message:
-          response.status === 200
-            ? "CMC x402 quote paid and returned successfully through TypeScript SDK."
-            : "CMC x402 request returned non-200 status.",
+          paidResponse.status === 200
+            ? "CMC x402 quote paid and returned successfully."
+            : "CMC x402 request returned non-200 status after sending payment payload.",
       })
     );
   } catch (error) {
-    const status = error?.response?.status || null;
-    const data = error?.response?.data || null;
-    const headers = error?.response?.headers || null;
-
     console.log(
       JSON.stringify({
         success: false,
         paid: false,
         used_in_decision: false,
         status: "error",
-        http_status: status,
+        http_status: error?.response?.status || null,
         symbol,
         provider: "CoinMarketCap",
         protocol: "x402",
@@ -147,9 +252,16 @@ async function main() {
         payment_chain_id: 8453,
         payment_asset: "USDC",
         expected_price_usd: "0.01",
-        wallet_address: account.address,
-        response_body_preview: data,
-        response_headers: safeHeaders(headers),
+        wallet_address: signer.address,
+        payment_required_debug: paymentRequired
+          ? summarizePaymentRequired(paymentRequired)
+          : null,
+        payment_payload_debug: paymentPayload
+          ? summarizePaymentPayload(paymentPayload)
+          : null,
+        payment_headers_sent: paymentHeaders ? Object.keys(paymentHeaders) : null,
+        response_body_preview: error?.response?.data || null,
+        response_headers: safeHeaders(error?.response?.headers || {}),
         message: error?.message || "CMC x402 TypeScript request failed.",
       })
     );
