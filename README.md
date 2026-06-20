@@ -6,12 +6,13 @@ https://www.iknowquantfu.com
 
 **I Know Quant Fu** is an autonomous crypto trading agent built for the **BNB Hack: AI Trading Agent Edition — CoinMarketCap × Trust Wallet** competition.
 
-It connects CoinMarketCap market intelligence, strategy testing, risk control, and Trust Wallet Agent Kit execution into one explainable trading loop.
+It connects CoinMarketCap market intelligence, CoinMarketCap x402 paid data, strategy testing, risk control, and Trust Wallet Agent Kit execution into one explainable trading loop.
 
 **Roundhouse kick dumb trades.**
 **Backtest the signal. Lock the risk. Automate the move.**
 
 The agent does not chase candles.
+
 It reads the market, tests the strategy, checks the risk, explains the decision, and only then decides whether to wait, simulate, paper trade, or execute.
 
 No confidence. No trade.
@@ -20,11 +21,29 @@ No dojo. No roundhouse.
 
 ---
 
+## Live Project
+
+Website:
+
+```txt
+https://www.iknowquantfu.com
+```
+
+Backend:
+
+```txt
+https://strategy-forge-production-a3f6.up.railway.app
+```
+
+The backend URL may still contain the old project name because it is the Railway service URL, not the visible product branding.
+
+---
+
 ## Vision
 
 I Know Quant Fu bridges market intelligence and disciplined execution.
 
-It reads CoinMarketCap signals, compares and backtests strategies, applies risk guardrails, then decides whether to wait, simulate, paper trade, or execute through Trust Wallet Agent Kit on BNB Chain with on-chain proof.
+It reads CoinMarketCap signals, uses CoinMarketCap x402 paid market data, compares and backtests strategies, applies risk guardrails, then decides whether to wait, simulate, paper trade, or execute through Trust Wallet Agent Kit on BNB Chain with on-chain proof.
 
 The goal is not just automation.
 
@@ -48,6 +67,7 @@ I Know Quant Fu solves this by connecting the full loop:
 
 ```txt
 CoinMarketCap intelligence
+→ CoinMarketCap x402 paid market data
 → strategy comparison
 → backtesting
 → confidence scoring
@@ -64,12 +84,16 @@ CoinMarketCap intelligence
 I Know Quant Fu can:
 
 * Read CoinMarketCap market intelligence
+* Pay for CoinMarketCap market data through x402 using Base USDC
+* Verify successful x402 payment responses
+* Use paid CoinMarketCap quote data inside the agent decision loop
 * Detect market regime and sentiment conditions
 * Generate, compare, and backtest trading strategies
 * Rank strategies by risk-adjusted performance
 * Apply confidence scoring and drawdown protection
 * Decide whether to hold, simulate, paper trade, or execute live
 * Connect to a user wallet
+* Read live portfolio state through Trust Wallet Agent Kit
 * Attempt execution through Trust Wallet Agent Kit
 * Route swaps through PancakeSwap on BNB Smart Chain
 * Display trade decisions, execution status, portfolio state, and proof
@@ -77,6 +101,7 @@ I Know Quant Fu can:
 * Explain why it acted — or why it waited
 
 Waiting is not a bug.
+
 Waiting is the agent refusing to roundhouse kick itself in the face.
 
 ---
@@ -85,6 +110,7 @@ Waiting is the agent refusing to roundhouse kick itself in the face.
 
 ```txt
 Market Data In
+→ CoinMarketCap x402 Paid Quote
 → Strategy Engine
 → Backtest + Optimizer
 → Confidence Model
@@ -122,6 +148,7 @@ The project focuses on:
 
 * Autonomous trading logic
 * CoinMarketCap-powered market intelligence
+* CoinMarketCap x402 paid data
 * Trust Wallet Agent Kit execution
 * Self-custody wallet flow
 * BNB Chain settlement
@@ -195,6 +222,67 @@ Binance-Peg USDT
 
 This matters because Track 1 requires the agent wallet to hold non-zero in-scope assets at competition start and maintain capital for the live trading window.
 
+Verified portfolio read through Trust Wallet Agent Kit:
+
+```txt
+portfolio.success: true
+chain: bsc
+agent wallet: 0x695b32DdB023f76dE3FE4de485F7C0131De4754C
+```
+
+---
+
+## CoinMarketCap x402 Payment Proof
+
+I Know Quant Fu includes a working CoinMarketCap x402 paid market-data flow.
+
+The deployed backend successfully pays CoinMarketCap through x402 using Base USDC and receives live paid market data back into the agent decision loop.
+
+Verified x402 proof:
+
+```txt
+success: true
+paid: true
+used_in_decision: true
+provider: CoinMarketCap
+protocol: x402
+endpoint: https://pro-api.coinmarketcap.com/x402/v3/cryptocurrency/quotes/latest
+payment_network: Base
+payment_chain_id: 8453
+payment_asset: USDC
+asset: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+assetTransferMethod: eip3009
+expected_price_usd: 0.01
+http_status: 200
+payment_response_header_present: true
+```
+
+x402 payment wallet:
+
+```txt
+0x209D07E2722b8BF4b9B31C8e06f0454236629cd0
+```
+
+Verified x402 payment transaction:
+
+```txt
+0x987ee0a44c51c3126fd32f529dcc96fe10e8965080d116a7a1e0fcb1eed963fc
+```
+
+Base explorer:
+
+```txt
+https://basescan.org/tx/0x987ee0a44c51c3126fd32f529dcc96fe10e8965080d116a7a1e0fcb1eed963fc
+```
+
+The paid CoinMarketCap quote was parsed by the backend and used inside the trading decision.
+
+Verified paid ETH quote:
+
+```txt
+ETH price_usd: 1735.081898045606
+```
+
 ---
 
 ## Live TWAK Execution Proof
@@ -218,14 +306,63 @@ Proof status:
 ```txt
 Agent wallet funded: yes
 Agent wallet has non-zero assets: yes
+TWAK portfolio read path working: yes
 TWAK execution path implemented: yes
 Live on-chain execution proof: yes
 BSC transaction hashes available: yes
+CoinMarketCap x402 paid data working: yes
 ```
 
 These transactions show live on-chain execution activity from the registered agent wallet on BNB Smart Chain.
 
 They are used as execution proof. They do not claim guaranteed profit or investment performance.
+
+---
+
+## Verified Agent Cycle Proof
+
+The deployed backend successfully completed a full agent cycle using paid CoinMarketCap x402 data.
+
+Verified agent-cycle result:
+
+```txt
+success: true
+mode: agent_cycle
+decision: HOLD
+execution_mode: simulation
+portfolio.success: true
+x402.success: true
+x402.paid: true
+x402.used_in_decision: true
+x402.http_status: 200
+x402.price_usd: 1735.081898045606
+market_data_payment_layer: CoinMarketCap x402 paid quote
+selected_strategy: FVG Channel
+```
+
+The agent chose:
+
+```txt
+HOLD
+```
+
+This was not a failure.
+
+The agent paid for market data, checked the live wallet portfolio, selected a strategy, backtested the setup, applied risk controls, and refused execution because the current setup was not strong enough.
+
+Verified reason:
+
+```txt
+No valid trade setup from current market conditions.
+```
+
+This demonstrates the core behavior of the project:
+
+```txt
+No confidence. No trade.
+No logic. No trade.
+No dumb entries.
+```
 
 ---
 
@@ -235,8 +372,12 @@ They are used as execution proof. They do not claim guaranteed profit or investm
 
 * CoinMarketCap market data
 * CoinMarketCap Skill Hub / MCP integration
+* CoinMarketCap x402 paid market-data flow
+* Base USDC x402 payment support
+* Paid quote verification through x402 payment response headers
 * Market regime detection
 * Fear and greed context
+* Altcoin rotation context
 * Asset and timeframe analysis
 
 ### Strategy Engine
@@ -332,11 +473,14 @@ This is the machine room.
 * Python
 * FastAPI
 * Railway deployment
+* Node.js helper client for CoinMarketCap x402 requests
 
 ### Market Intelligence
 
 * CoinMarketCap API
 * CoinMarketCap Skill Hub MCP
+* CoinMarketCap x402 paid API
+* Base USDC x402 payment flow
 
 ### Wallet / Execution
 
@@ -375,14 +519,15 @@ The backend URL may still contain the old project name because it is the Railway
 1. The user selects an eligible asset.
 2. The user chooses an execution mode.
 3. The user selects trade interval and trade size.
-4. The agent reads market intelligence.
-5. The agent generates or optimizes strategy logic.
-6. The strategy is backtested and ranked.
-7. Risk guardrails are checked.
-8. The agent decides whether to wait, simulate, paper trade, or execute.
-9. If execution is allowed, TWAK handles the self-custody execution path.
-10. The UI displays decision, route, status, and proof.
-11. If a live transaction succeeds, the UI surfaces the BSC transaction hash and BscScan proof link.
+4. The agent reads CoinMarketCap market intelligence.
+5. The agent can pay CoinMarketCap through x402 for live paid quote data.
+6. The agent generates or optimizes strategy logic.
+7. The strategy is backtested and ranked.
+8. Risk guardrails are checked.
+9. The agent decides whether to wait, simulate, paper trade, or execute.
+10. If execution is allowed, TWAK handles the self-custody execution path.
+11. The UI displays decision, route, status, and proof.
+12. If a live transaction succeeds, the UI surfaces the BSC transaction hash and BscScan proof link.
 
 ---
 
@@ -493,13 +638,15 @@ Competition-week ranking still depends on official Track 1 rules, wallet eligibi
 
 I Know Quant Fu is designed around self-custody execution.
 
-The frontend and backend do not store seed phrases or private keys.
+The frontend and backend do not store seed phrases.
 
 Signing authority should stay with the user or configured agent wallet through the Trust Wallet Agent Kit flow.
 
 The backend generates strategy decisions, risk checks, and execution requests.
 
 TWAK handles the wallet execution path.
+
+The x402 payment wallet is separate from the BNB Chain agent wallet and is used to pay for CoinMarketCap x402 market-data requests.
 
 ---
 
@@ -512,12 +659,14 @@ TWAK handles the wallet execution path.
 5. Show the BSC explorer page for the agent wallet.
 6. Show the wallet funding proof transaction.
 7. Show the live TWAK execution proof transactions.
-8. Select an eligible asset.
-9. Run auto-optimization.
-10. Show selected strategy, backtest result, risk status, and confidence.
-11. Run the agent.
-12. Show the decision: HOLD, paper trade, or live execution.
-13. If live execution succeeds, open the BscScan transaction proof.
+8. Show the CoinMarketCap x402 payment proof on Base.
+9. Select an eligible asset.
+10. Run auto-optimization.
+11. Show selected strategy, backtest result, risk status, and confidence.
+12. Run the agent.
+13. Show that paid x402 market data was used in the decision.
+14. Show the decision: HOLD, paper trade, or live execution.
+15. If live execution succeeds, open the BscScan transaction proof.
 
 ---
 
@@ -561,7 +710,11 @@ CMC_MCP_API_KEY=your_coinmarketcap_mcp_key
 TWAK_CONFIG=your_twak_config
 AGENT_WALLET_ADDRESS=your_agent_wallet_address
 IKQF_ADMIN_KEY=your_operator_key
+X402_ENABLED=true
+X402_EVM_PRIVATE_KEY=your_x402_payment_wallet_private_key
 ```
+
+The x402 payment wallet should be funded with enough Base USDC to pay for CoinMarketCap x402 requests.
 
 Use `.env.example` for public documentation and keep real `.env` files private.
 
@@ -583,11 +736,19 @@ Self-custody integrity is important to the project.
 
 Signing authority should stay with the user or configured agent wallet through the TWAK flow.
 
+Repeated x402 tests may spend USDC, so paid endpoint testing should be limited to necessary demo and verification runs.
+
 ---
 
 ## Current Limitations
 
-The project does not claim x402 usage unless that feature is added and proven.
+CoinMarketCap x402 paid market data is implemented and proven.
+
+The deployed backend has successfully paid CoinMarketCap through x402 using Base USDC, received a paid quote response, parsed the ETH price, and used that paid market data inside the agent decision loop.
+
+Trust Wallet Agent Kit portfolio access is working on Railway.
+
+Live on-chain execution proof is available on BNB Smart Chain.
 
 The project does not claim BNB AI Agent SDK usage unless that feature is added and proven.
 
@@ -598,6 +759,8 @@ Live on-chain execution proof is available.
 Competition registration status is reported by the application, but an exact registration transaction hash should be added if judges require direct registration proof.
 
 Competition-week ranking still depends on official Track 1 rules, wallet eligibility, live trading-window activity, and real PnL measured by the competition system.
+
+Repeated x402 tests may spend USDC, so paid endpoint testing should be limited to necessary demo and verification runs.
 
 ---
 
