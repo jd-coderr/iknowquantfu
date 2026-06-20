@@ -705,6 +705,18 @@ function App() {
     return true;
   }
 
+  function isOperatorControlLocked(extraCondition = false) {
+    return !operatorUnlocked || !operatorKey.trim() || loading || Boolean(extraCondition);
+  }
+
+  function getOperatorLockTitle(actionLabel = "OPERATOR CONTROL") {
+    if (!operatorUnlocked || !operatorKey.trim()) {
+      return `${actionLabel} LOCKED. OPEN OPTIONS MENU AND UNLOCK OPERATOR MODE.`;
+    }
+
+    return "";
+  }
+
   async function unlockOperatorMode() {
     const key = operatorKey.trim();
 
@@ -841,6 +853,8 @@ function App() {
   }
 
   function handleManualSetupChange(patch, resetStrategy = false) {
+    if (!requireOperatorMode("CHANGE AGENT SETUP")) return;
+
     if (patch.coin !== undefined) setCoin(patch.coin);
     if (patch.timeframe !== undefined) setTimeframe(patch.timeframe);
     if (patch.risk !== undefined) setRisk(patch.risk);
@@ -1696,6 +1710,8 @@ Best eligible risk-adjusted score among all tested combinations.
   }
 
   async function connectWallet() {
+    if (!requireOperatorMode("CONNECT VIEWER WALLET")) return;
+
     pulseButton("wallet");
 
     if (!window.ethereum) {
@@ -1768,6 +1784,8 @@ Best eligible risk-adjusted score among all tested combinations.
   }
 
   async function generateStrategy() {
+    if (!requireOperatorMode("GENERATE STRATEGY")) return;
+
     pulseButton("generate");
     setAutoOptimized(false);
     setSetupSource("generating_strategy");
@@ -1779,18 +1797,25 @@ Best eligible risk-adjusted score among all tested combinations.
     try {
       const response = await fetch(`${API_BASE}/generate-strategy`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: getOperatorHeaders({
+          "Content-Type": "application/json",
+        }),
         body: JSON.stringify({
           coin,
           timeframe,
           risk,
-          initial_capital: initialCapital
-        })
+          initial_capital: initialCapital,
+        }),
       });
 
+      if (await handleLockedResponse(response)) return;
+
       const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Strategy generation failed.");
+      }
+
       setResult(data);
       setAutoOptimized(false);
       setSetupSource("generated_strategy");
@@ -1804,14 +1829,17 @@ Best eligible risk-adjusted score among all tested combinations.
         source: "generated_strategy",
       });
     } catch (error) {
+      console.error(error);
       alert("FAILED TO CONNECT TO BACKEND");
+    } finally {
+      setLoading(false);
+      setLoadingMode("");
     }
-
-    setLoading(false);
-    setLoadingMode("");
   }
 
   async function optimizeStrategy() {
+    if (!requireOperatorMode("AUTO-OPTIMIZE SETUP")) return;
+
     pulseButton("optimize");
     setAutoOptimized(false);
     setSetupSource("optimizer_running");
@@ -1823,14 +1851,16 @@ Best eligible risk-adjusted score among all tested combinations.
     try {
       const response = await fetch(`${API_BASE}/optimize-strategy`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: getOperatorHeaders({
+          "Content-Type": "application/json",
+        }),
         body: JSON.stringify({
           coin,
-          initial_capital: initialCapital
-        })
+          initial_capital: initialCapital,
+        }),
       });
+
+      if (await handleLockedResponse(response)) return;
 
       const data = await response.json();
 
@@ -1849,13 +1879,13 @@ Best eligible risk-adjusted score among all tested combinations.
 
         setCmcSkillHub({
           ...skillData,
-          query: skillQuery
+          query: skillQuery,
         });
       } catch (skillError) {
         setCmcSkillHub({
           ok: false,
           query: `${best.coin || coin} strategy`,
-          error: "CMC Skill Hub unavailable"
+          error: "CMC Skill Hub unavailable",
         });
       }
 
@@ -1884,8 +1914,8 @@ Best eligible risk-adjusted score among all tested combinations.
           tested_combinations: data.tested_combinations,
           eligible_combinations: data.eligible_combinations,
           all_results: data.all_results,
-          frequency_ranked_results: data.frequency_ranked_results
-        }
+          frequency_ranked_results: data.frequency_ranked_results,
+        },
       };
 
       setResult(optimizedResult);
@@ -1899,11 +1929,12 @@ Best eligible risk-adjusted score among all tested combinations.
         source: "auto_optimization",
       });
     } catch (error) {
+      console.error(error);
       alert("FAILED TO CONNECT TO OPTIMIZER");
+    } finally {
+      setLoading(false);
+      setLoadingMode("");
     }
-
-    setLoading(false);
-    setLoadingMode("");
   }
 
 async function runAgentCycle() {
@@ -2068,6 +2099,8 @@ async function resetPaperPortfolio() {
 }
 
 function resetPnlBaseline() {
+  if (!requireOperatorMode("RESET PORTFOLIO BASELINE")) return;
+
   pulseButton("resetPnl");
 
   if (!portfolio) {
@@ -2162,7 +2195,7 @@ async function loadTradeHistory() {
                 {operatorUnlocked ? "LOCK CONTROLS" : "UNLOCK CONTROLS"}
               </button>
               <p style={{ marginTop: "8px", fontSize: "10px", lineHeight: "1.35" }}>
-                PUBLIC VISITORS CAN WATCH. ONLY THE OPERATOR CAN START, STOP, OR EXECUTE.
+                PUBLIC VISITORS CAN WATCH ONLY. ONLY THE OPERATOR CAN CONNECT A WALLET, OPTIMIZE, CHANGE SETUP, START, STOP, OR EXECUTE.
               </p>
             </div>
             <button
@@ -2379,13 +2412,13 @@ async function loadTradeHistory() {
               <div className="simple-metric-row"><span>RISK</span><strong>{getRiskProfileLabel(risk)}</strong></div>
 
               <div className="simple-action-grid">
-                <button onClick={optimizeStrategy} disabled={loading} style={getButtonStyle("optimize")}>
+                <button onClick={optimizeStrategy} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("AUTO-OPTIMIZE SETUP")} style={getButtonStyle("optimize")}>
                   {loading && loadingMode === "optimize" ? "I AM OPTIMIZING..." : autoOptimized ? "AUTO-OPTIMIZED" : "> AUTO-OPTIMIZE <"}
                 </button>
-                <button onClick={connectWallet} disabled={loading} style={getButtonStyle("wallet")}>
+                <button onClick={connectWallet} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("CONNECT VIEWER WALLET")} style={getButtonStyle("wallet")}>
                   {walletAddress ? "WALLET CONNECTED" : "> CONNECT WALLET <"}
                 </button>
-                <button onClick={runAgentCycle} disabled={loading} style={getButtonStyle("run")}>
+                <button onClick={runAgentCycle} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("RUN AGENT")} style={getButtonStyle("run")}>
                   {loading && loadingMode === "agent" ? (
                     <>
                       I AM RUNNING<span className="loading-dots"></span>
@@ -2396,7 +2429,7 @@ async function loadTradeHistory() {
                     "> RUN AGENT <"
                   )}
                 </button>
-                <button onClick={stopAutonomousMode} disabled={loading} style={getButtonStyle("stop")}>
+                <button onClick={stopAutonomousMode} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("STOP AGENT")} style={getButtonStyle("stop")}>
                   {agentStopConfirmed && !autonomousMode ? "I AM STOPPED" : "> STOP AGENT <"}
                 </button>
               </div>
@@ -2404,7 +2437,7 @@ async function loadTradeHistory() {
               <div className="simple-control-grid">
                 <div>
                   <label>ASSET</label>
-                  <select value={coin} disabled={loading} onChange={(e) => handleManualSetupChange({ coin: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
+                  <select value={coin} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ coin: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
                     <option value="ETH">Ethereum (ETH)</option>
                     <option value="XRP">XRP (XRP)</option>
                     <option value="DOGE">Dogecoin (DOGE)</option>
@@ -2431,7 +2464,7 @@ async function loadTradeHistory() {
                   <label>MODE</label>
                   <select
                     value={executionMode || ""}
-                    disabled={autonomousMode || loading}
+                    disabled={isOperatorControlLocked(autonomousMode)}
                     onChange={(e) => {
                       const mode = e.target.value;
                       handleManualSetupChange({
@@ -2451,7 +2484,7 @@ async function loadTradeHistory() {
                   <label>INTERVAL</label>
                   <select
   value={autonomousInterval}
-  disabled={autonomousMode}
+  disabled={isOperatorControlLocked(autonomousMode)}
   onChange={(e) => handleManualSetupChange({ interval_minutes: Number(e.target.value) }, false)}
   onWheel={(e) => e.currentTarget.blur()}
 >
@@ -2463,7 +2496,7 @@ async function loadTradeHistory() {
                 </div>
                 <div>
                   <label>TRADE SIZE ({coin})</label>
-                  <input type="number" min="0" step="0.001" value={tradeSize} disabled={loading} onChange={(e) => handleManualSetupChange({ trade_size: Number(e.target.value) }, false)} />
+                  <input type="number" min="0" step="0.001" value={tradeSize} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ trade_size: Number(e.target.value) }, false)} />
                 </div>
               </div>
 
@@ -2721,7 +2754,7 @@ async function loadTradeHistory() {
                   {Number(portfolio?.tradingPnlUsd || 0) >= 0 ? "+" : "-"}$
                   {Math.abs(Number(portfolio?.tradingPnlUsd || 0)).toFixed(2)}
                 </p>
-                <button onClick={resetPnlBaseline} className="copy-btn" style={{ marginTop: "12px", ...getButtonStyle("resetPnl") }}>
+                <button onClick={resetPnlBaseline} disabled={isOperatorControlLocked()} className="copy-btn" style={{ marginTop: "12px", ...getButtonStyle("resetPnl") }}>
                   {"> RESET PORTFOLIO BASELINE <"}
                 </button>
               </div>
@@ -2753,11 +2786,11 @@ async function loadTradeHistory() {
                       min="10"
                       step="10"
                       value={paperStartingBalance}
-                      disabled={autonomousMode || loading}
+                      disabled={isOperatorControlLocked(autonomousMode)}
                       onChange={(e) => setPaperStartingBalance(Number(e.target.value))}
                     />
                   </div>
-                  <button onClick={resetPaperPortfolio} disabled={autonomousMode || loading} className="copy-btn" style={{ marginTop: "12px", ...getButtonStyle("resetPaper") }}>
+                  <button onClick={resetPaperPortfolio} disabled={isOperatorControlLocked(autonomousMode)} className="copy-btn" style={{ marginTop: "12px", ...getButtonStyle("resetPaper") }}>
                     {"> RESET PAPER PORTFOLIO <"}
                   </button>
                 </div>
@@ -2776,8 +2809,11 @@ async function loadTradeHistory() {
           <div className="retro-quadrant-body">
             <details className="retro-window" open>
               <summary>QUICK START ACTIONS</summary>
+              {!operatorUnlocked && (
+                <div className="operator-locked-banner">PUBLIC READ-ONLY MODE — UNLOCK OPERATOR MODE TO CHANGE SETUP, CONNECT WALLET, OPTIMIZE, OR RUN THE AGENT.</div>
+              )}
               <div className="agent-control-panel">
-                <button onClick={optimizeStrategy} disabled={loading} className="copy-btn" style={getButtonStyle("optimize")}>
+                <button onClick={optimizeStrategy} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("AUTO-OPTIMIZE SETUP")} className="copy-btn" style={getButtonStyle("optimize")}>
                   {loading && loadingMode === "optimize" ? (
                     <>
                       OPTIMIZING<span className="loading-dots"></span>
@@ -2789,13 +2825,13 @@ async function loadTradeHistory() {
                   )}
                 </button>
 
-                <button onClick={connectWallet} disabled={loading} className="copy-btn" style={getButtonStyle("wallet")}>
+                <button onClick={connectWallet} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("CONNECT VIEWER WALLET")} className="copy-btn" style={getButtonStyle("wallet")}>
                   {walletAddress ? "WALLET CONNECTED" : "> CONNECT WALLET <"}
                 </button>
               </div>
 
               <div className="button-row">
-                <button onClick={runAgentCycle} disabled={loading} className="copy-btn" style={getButtonStyle("run")}>
+                <button onClick={runAgentCycle} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("RUN AGENT")} className="copy-btn" style={getButtonStyle("run")}>
                   {loading && loadingMode === "agent" ? (
       <>
         RUNNING AGENT<span className="loading-dots"></span>
@@ -2809,7 +2845,7 @@ async function loadTradeHistory() {
     )}
                 </button>
 
-                <button onClick={stopAutonomousMode} disabled={loading} className="copy-btn" style={getButtonStyle("stop")}>
+                <button onClick={stopAutonomousMode} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("STOP AGENT")} className="copy-btn" style={getButtonStyle("stop")}>
                   {agentStopConfirmed && !autonomousMode
                     ? "AGENT STOPPED"
                     : activeButton === "stop"
@@ -2821,11 +2857,14 @@ async function loadTradeHistory() {
 
             <details className="retro-window">
               <summary>TRADE SETUP / OPERATOR CONTROLS</summary>
+              {!operatorUnlocked && (
+                <div className="operator-locked-banner">SETUP LOCKED — ASSET, STRATEGY, MODE, SIZE, AND INTERVAL NEED OPERATOR PASSWORD.</div>
+              )}
               <h2 className="strategy-library-title">TRADE SETUP</h2>
               <div className="input-row">
                 <div>
                   <label>ASSET</label>
-                  <select value={coin} disabled={loading} onChange={(e) => handleManualSetupChange({ coin: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
+                  <select value={coin} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ coin: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
                     <option value="ETH">Ethereum (ETH)</option>
                     <option value="XRP">XRP (XRP)</option>
                     <option value="DOGE">Dogecoin (DOGE)</option>
@@ -2851,7 +2890,7 @@ async function loadTradeHistory() {
 
                 <div>
                   <label>TIMEFRAME</label>
-                  <select value={timeframe} disabled={loading} onChange={(e) => handleManualSetupChange({ timeframe: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
+                  <select value={timeframe} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ timeframe: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
                     <option value="5M">5M</option>
                     <option value="15M">15M</option>
                     <option value="1H">1H</option>
@@ -2862,7 +2901,7 @@ async function loadTradeHistory() {
 
                 <div>
                   <label>RISK PROFILE</label>
-                  <select value={risk} disabled={loading} onChange={(e) => handleManualSetupChange({ risk: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
+                  <select value={risk} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ risk: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
                     <option value="low">CONSERVATIVE</option>
                     <option value="medium">BALANCED</option>
                     <option value="high">AGGRESSIVE / GOVERNED</option>
@@ -2873,14 +2912,14 @@ async function loadTradeHistory() {
                   <label>BACKTEST CAPITAL</label>
                   <div className="capital-input">
                     <span>$</span>
-                    <input type="number" min="100" step="100" value={initialCapital} disabled={loading} onChange={(e) => handleManualSetupChange({ initial_capital: Number(e.target.value) }, true)} />
+                    <input type="number" min="100" step="100" value={initialCapital} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ initial_capital: Number(e.target.value) }, true)} />
                   </div>
                 </div>
 
                 <div>
                   <label>TRADE SIZE ({coin})</label>
                   <div className="capital-input trade-size-input">
-                    <input type="number" min="0" step="0.001" value={tradeSize} disabled={loading} onChange={(e) => handleManualSetupChange({ trade_size: Number(e.target.value) }, false)} />
+                    <input type="number" min="0" step="0.001" value={tradeSize} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ trade_size: Number(e.target.value) }, false)} />
                   </div>
                 </div>
               </div>
@@ -2895,14 +2934,14 @@ async function loadTradeHistory() {
 
               <h2 className="strategy-library-title">CUSTOM SETUP</h2>
               <div className="agent-control-panel">
-                <button onClick={generateStrategy} disabled={loading} className="copy-btn" style={getButtonStyle("generate")}>
+                <button onClick={generateStrategy} disabled={isOperatorControlLocked()} title={getOperatorLockTitle("GENERATE STRATEGY")} className="copy-btn" style={getButtonStyle("generate")}>
                   {loading && loadingMode === "generate" ? "GENERATING..." : "> GENERATE STRATEGY <"}
                 </button>
 
                 <div>
                   <select
                     value={executionMode || ""}
-                    disabled={autonomousMode || loading}
+                    disabled={isOperatorControlLocked(autonomousMode)}
                     onChange={(e) => {
                       const mode = e.target.value;
                       handleManualSetupChange({
@@ -2925,7 +2964,7 @@ async function loadTradeHistory() {
 
                 <select
   value={autonomousInterval}
-  disabled={autonomousMode}
+  disabled={isOperatorControlLocked(autonomousMode)}
   onChange={(e) => handleManualSetupChange({ interval_minutes: Number(e.target.value) }, false)}
   onWheel={(e) => e.currentTarget.blur()}
 >
@@ -3582,10 +3621,14 @@ async function loadTradeHistory() {
 <div className="panel">
         <div className="panel-title">QUICK START</div>
 
+{!operatorUnlocked && (
+  <div className="operator-locked-banner">PUBLIC READ-ONLY MODE — UNLOCK OPERATOR MODE TO CHANGE SETUP, CONNECT WALLET, OPTIMIZE, OR RUN THE AGENT.</div>
+)}
+
 <div className="agent-control-panel">
   <button
     onClick={optimizeStrategy}
-    disabled={loading}
+    disabled={isOperatorControlLocked()}
     className="copy-btn"
     style={getButtonStyle("optimize")}
   >
@@ -3602,7 +3645,8 @@ async function loadTradeHistory() {
 
   <button
     onClick={connectWallet}
-    disabled={loading}
+    disabled={isOperatorControlLocked()}
+    title={getOperatorLockTitle("CONNECT VIEWER WALLET")}
     className="copy-btn"
     style={getButtonStyle("wallet")}
   >
@@ -3613,7 +3657,7 @@ async function loadTradeHistory() {
 <div className="button-row">
   <button
     onClick={runAgentCycle}
-    disabled={loading}
+    disabled={isOperatorControlLocked()}
     className="copy-btn"
     style={getButtonStyle("run")}
   >
@@ -3632,7 +3676,7 @@ async function loadTradeHistory() {
 
   <button
     onClick={stopAutonomousMode}
-    disabled={loading}
+    disabled={isOperatorControlLocked()}
     className="copy-btn"
     style={getButtonStyle("stop")}
   >
@@ -3654,6 +3698,9 @@ async function loadTradeHistory() {
 
 <div className="panel operator-controls-panel">
   <div className="panel-title">TRADE SETUP / OPERATOR CONTROLS</div>
+{!operatorUnlocked && (
+  <div className="operator-locked-banner">SETUP LOCKED — ASSET, STRATEGY, MODE, SIZE, AND INTERVAL NEED OPERATOR PASSWORD.</div>
+)}
 <h2 className="strategy-library-title">TRADE SETUP</h2>
 
         <div className="input-row">
@@ -3661,7 +3708,7 @@ async function loadTradeHistory() {
             <label>ASSET</label>
             <select
   value={coin}
-  disabled={loading}
+  disabled={isOperatorControlLocked()}
   onChange={(e) => handleManualSetupChange({ coin: e.target.value }, true)}
   onWheel={(e) => e.currentTarget.blur()}
 >
@@ -3690,7 +3737,7 @@ async function loadTradeHistory() {
 
           <div>
             <label>TIMEFRAME</label>
-            <select value={timeframe} disabled={loading} onChange={(e) => handleManualSetupChange({ timeframe: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
+            <select value={timeframe} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ timeframe: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
               <option value="5M">5M</option>
               <option value="15M">15M</option>
               <option value="1H">1H</option>
@@ -3701,7 +3748,7 @@ async function loadTradeHistory() {
 
           <div>
             <label>RISK PROFILE</label>
-            <select value={risk} disabled={loading} onChange={(e) => handleManualSetupChange({ risk: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
+            <select value={risk} disabled={isOperatorControlLocked()} onChange={(e) => handleManualSetupChange({ risk: e.target.value }, true)} onWheel={(e) => e.currentTarget.blur()}>
               <option value="low">CONSERVATIVE</option>
               <option value="medium">BALANCED</option>
               <option value="high">AGGRESSIVE / GOVERNED</option>
@@ -3719,7 +3766,7 @@ async function loadTradeHistory() {
                 min="100"
                 step="100"
                 value={initialCapital}
-                disabled={loading}
+                disabled={isOperatorControlLocked()}
                 onChange={(e) => handleManualSetupChange({ initial_capital: Number(e.target.value) }, true)}
               />
             </div>
@@ -3734,7 +3781,7 @@ async function loadTradeHistory() {
                 min="0"
                 step="0.001"
                 value={tradeSize}
-                disabled={loading}
+                disabled={isOperatorControlLocked()}
                 onChange={(e) => handleManualSetupChange({ trade_size: Number(e.target.value) }, false)}
               />
             </div>
@@ -3756,7 +3803,7 @@ async function loadTradeHistory() {
         <div className="full-custom-strategy-row">
           <button
             onClick={generateStrategy}
-            disabled={loading}
+            disabled={isOperatorControlLocked()}
             className="copy-btn"
             style={getButtonStyle("generate")}
           >
@@ -3767,7 +3814,7 @@ async function loadTradeHistory() {
 
           <select
             value={manualStrategy || result?.selected_strategy || ""}
-            disabled={loading}
+            disabled={isOperatorControlLocked()}
             onWheel={(e) => e.currentTarget.blur()}
             onChange={(e) => {
               const selectedStrategy = e.target.value;
@@ -3789,7 +3836,7 @@ async function loadTradeHistory() {
         <div className="full-execution-mode-row">
           <select
             value={executionMode || ""}
-            disabled={autonomousMode || loading}
+            disabled={isOperatorControlLocked(autonomousMode)}
             onWheel={(e) => e.currentTarget.blur()}
             onChange={(e) => {
               const mode = e.target.value;
@@ -3813,7 +3860,7 @@ async function loadTradeHistory() {
 
           <select
             value={autonomousInterval}
-            disabled={autonomousMode}
+            disabled={isOperatorControlLocked(autonomousMode)}
             onChange={(e) => handleManualSetupChange({ interval_minutes: Number(e.target.value) }, false)}
             onWheel={(e) => e.currentTarget.blur()}
           >
