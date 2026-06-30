@@ -3849,18 +3849,17 @@ async function loadTradeHistory() {
 
                       <div className="optimizer-table">
                       <div className="optimizer-row optimizer-header">
-                        <span>RANK</span><span>TIMEFRAME</span><span>RISK</span><span>STRATEGY</span><span>RETURN</span><span>SHARPE</span><span>CALMAR</span><span>PF</span><span>MAX DD</span><span>SCORE</span><span>ACTION</span>
+                        <span>ACTION</span><span>RANK</span><span>TIMEFRAME</span><span>RISK</span><span>STRATEGY</span><span>RETURN</span><span>SHARPE</span><span>CALMAR</span><span>PF</span><span>MAX DD</span><span>SCORE</span>
                       </div>
                       {result.optimization.all_results
                         ?.filter((item) => item.backtest.min_trade_gate === "PASS" && item.backtest.drawdown_gate === "PASS")
                         .sort((a, b) => optimizerScoreValue(b) - optimizerScoreValue(a))
-                        .slice(0, 5)
+                        .slice(0, 8)
                         .map((item, index) => {
                           const overrideActive = isOptimizerRowOverrideActive(item);
 
                           return (
                             <div className={`optimizer-row ${overrideActive ? "optimizer-row-overridden" : ""}`} key={index}>
-                              <span>#{index + 1}</span><span>{item.timeframe}</span><span>{getRiskProfileLabel(item.risk)}</span><span>{item.selected_strategy}</span><span>{item.backtest.net_return}</span><span>{item.backtest.sharpe_ratio}</span><span>{item.backtest.calmar_ratio}</span><span>{item.backtest.profit_factor}</span><span>{item.backtest.max_drawdown}</span><span>{optimizerScoreValue(item)}</span>
                               <span className="optimizer-override-cell">
                                 <button
                                   type="button"
@@ -3871,6 +3870,7 @@ async function loadTradeHistory() {
                                   {overrideActive ? "OVERRIDDEN" : "OVERRIDE"}
                                 </button>
                               </span>
+                              <span>#{index + 1}</span><span>{item.timeframe}</span><span>{getRiskProfileLabel(item.risk)}</span><span>{item.selected_strategy}</span><span>{item.backtest.net_return}</span><span>{item.backtest.sharpe_ratio}</span><span>{item.backtest.calmar_ratio}</span><span>{item.backtest.profit_factor}</span><span>{item.backtest.max_drawdown}</span><span>{optimizerScoreValue(item)}</span>
                             </div>
                           );
                         })}
@@ -3889,22 +3889,34 @@ async function loadTradeHistory() {
                     </div>
                     {getFrequencyRankedResults()
                       .slice(0, 8)
-                      .map((item, index) => (
-                        <div className="metrics strategy-library-box" key={index}>
-                          <p><strong>#{index + 1} {item.selected_strategy}</strong></p>
-                          <p>TIMEFRAME.......... {item.timeframe}</p>
-                          <p>RISK............... {String(item.risk).toUpperCase()}</p>
-                          <p>STYLE.............. {item.backtest?.trade_style || "N/A"}</p>
-                          <p>SIGNALS / DAY...... {item.backtest?.signals_per_day || "N/A"}</p>
-                          <p>ACTIVE DAYS........ {item.backtest?.active_days_pct || "N/A"}</p>
-                          <p>AVG WAIT........... {item.backtest?.avg_hours_between_signals || "N/A"}</p>
-                          <p>MAX QUIET GAP...... {item.backtest?.longest_quiet_gap || "N/A"}</p>
-                          <p>WIN FLOOR.......... {parseMetricNumber(item.backtest?.win_rate, 0) >= 30 ? "PASS" : "FAIL"}</p>
-                          <p>WIN RATE........... {item.backtest?.win_rate || "N/A"}</p>
-                          <p>PROFIT FACTOR...... {item.backtest?.profit_factor || "N/A"}</p>
-                          <p>MAX DRAWDOWN....... {item.backtest?.max_drawdown || "N/A"}</p>
-                        </div>
-                      ))}
+                      .map((item, index) => {
+                        const overrideActive = isOptimizerRowOverrideActive(item);
+
+                        return (
+                          <div className={`metrics strategy-library-box frequency-override-card ${overrideActive ? "optimizer-row-overridden" : ""}`} key={index}>
+                            <p><strong>#{index + 1} {item.selected_strategy}</strong></p>
+                            <button
+                              type="button"
+                              className={`optimizer-override-btn frequency-override-btn ${overrideActive ? "optimizer-override-btn-active" : ""}`}
+                              disabled={isAgentSetupLocked()}
+                              onClick={() => handleOptimizerRowOverride(item)}
+                            >
+                              {overrideActive ? "OVERRIDDEN" : `OVERRIDE TO ${item.selected_strategy} / ${item.timeframe}`}
+                            </button>
+                            <p>TIMEFRAME.......... {item.timeframe}</p>
+                            <p>RISK............... {String(item.risk).toUpperCase()}</p>
+                            <p>STYLE.............. {item.backtest?.trade_style || "N/A"}</p>
+                            <p>SIGNALS / DAY...... {item.backtest?.signals_per_day || "N/A"}</p>
+                            <p>ACTIVE DAYS........ {item.backtest?.active_days_pct || "N/A"}</p>
+                            <p>AVG WAIT........... {item.backtest?.avg_hours_between_signals || "N/A"}</p>
+                            <p>MAX QUIET GAP...... {item.backtest?.longest_quiet_gap || "N/A"}</p>
+                            <p>WIN FLOOR.......... {parseMetricNumber(item.backtest?.win_rate, 0) >= 30 ? "PASS" : "FAIL"}</p>
+                            <p>WIN RATE........... {item.backtest?.win_rate || "N/A"}</p>
+                            <p>PROFIT FACTOR...... {item.backtest?.profit_factor || "N/A"}</p>
+                            <p>MAX DRAWDOWN....... {item.backtest?.max_drawdown || "N/A"}</p>
+                          </div>
+                        );
+                      })}
                   </details>
                 )}
 

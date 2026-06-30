@@ -3311,7 +3311,7 @@ select option:checked {
 
 /* Optimizer Report row override buttons */
 .optimizer-row {
-  grid-template-columns: 0.6fr 0.8fr 0.8fr 2.4fr 0.8fr 0.8fr 0.8fr 0.7fr 0.8fr 0.8fr 1fr;
+  grid-template-columns: 1.25fr 0.55fr 0.75fr 0.9fr 2.3fr 0.8fr 0.75fr 0.75fr 0.7fr 0.8fr 0.8fr;
   min-width: 820px;
 }
 
@@ -3353,10 +3353,50 @@ select option:checked {
 }
 
 .full-terminal .optimizer-row {
-  grid-template-columns: 0.6fr 0.8fr 0.8fr 2.4fr 0.8fr 0.8fr 0.8fr 0.7fr 0.8fr 0.8fr 1fr;
+  grid-template-columns: 1.25fr 0.55fr 0.75fr 0.9fr 2.3fr 0.8fr 0.75fr 0.75fr 0.7fr 0.8fr 0.8fr;
 }
 
 .full-terminal .optimizer-override-btn {
   min-height: 38px !important;
   font-size: clamp(9px, 1vw, 12px) !important;
+}
+
+
+/* Optimizer override visibility fix: keep OVERRIDE visible on the left side. */
+.optimizer-table {
+  overflow-x: auto;
+}
+
+.optimizer-override-cell {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: rgba(28, 0, 0, 0.94) !important;
+  border-right: 1px solid rgba(255, 48, 48, 0.9) !important;
+}
+
+.optimizer-header .optimizer-override-cell,
+.optimizer-header span:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: rgba(80, 0, 0, 0.96) !important;
+  color: #ffffff !important;
+}
+
+.optimizer-override-btn,
+.frequency-override-btn {
+  width: 100% !important;
+  max-width: none !important;
+  display: block !important;
+}
+
+.frequency-override-card {
+  border-color: rgba(255, 48, 48, 0.75) !important;
+}
+
+.frequency-override-btn {
+  margin: 6px 0 10px !important;
+  min-height: 34px !important;
+  font-size: clamp(8px, 1vmin, 12px) !important;
 }
