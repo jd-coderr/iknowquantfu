@@ -162,6 +162,7 @@ def get_default_agent_setup():
         "trade_size": 0.001,
         "interval_minutes": 5,
         "selected_strategy": None,
+        "strategy_only_mode": False,
         "result_snapshot": None,
         "optimization": None,
         "source": "default",
@@ -215,6 +216,7 @@ def update_saved_agent_setup(
     execution_mode=None,
     trade_size=None,
     selected_strategy=None,
+    strategy_only_mode=None,
     interval_minutes=None,
     result_snapshot=None,
     optimization=None,
@@ -231,6 +233,7 @@ def update_saved_agent_setup(
         "execution_mode": execution_mode,
         "trade_size": trade_size,
         "selected_strategy": selected_strategy,
+        "strategy_only_mode": strategy_only_mode,
         "interval_minutes": interval_minutes,
         "result_snapshot": result_snapshot,
         "optimization": optimization,
@@ -259,6 +262,7 @@ def get_autonomous_config_snapshot():
         "execution_mode": AUTONOMOUS_CONFIG.execution_mode,
         "trade_size": AUTONOMOUS_CONFIG.trade_size,
         "selected_strategy": AUTONOMOUS_CONFIG.selected_strategy,
+        "strategy_only_mode": bool(getattr(AUTONOMOUS_CONFIG, "strategy_only_mode", False)),
     }
 
 
@@ -334,6 +338,8 @@ class AgentCycleRequest(BaseModel):
     trade_size: float = 0.001
     interval_minutes: int = 5
     selected_strategy: str | None = None
+    # None means “use the saved backend setting” for compatibility with older frontends.
+    strategy_only_mode: bool | None = None
 
 class AutonomousRequest(BaseModel):
     coin: str = "ETH"
@@ -344,6 +350,8 @@ class AutonomousRequest(BaseModel):
     execution_mode: str = "decision_simulation"
     trade_size: float = 0.001
     selected_strategy: str | None = None
+    # None means “use the saved backend setting” for compatibility with older frontends.
+    strategy_only_mode: bool | None = None
     interval_minutes: int = 5
     result_snapshot: dict | None = None
     optimization: dict | None = None
@@ -360,6 +368,7 @@ class AgentSetupRequest(BaseModel):
     trade_size: float | None = None
     interval_minutes: int | None = None
     selected_strategy: str | None = None
+    strategy_only_mode: bool | None = None
     result_snapshot: dict | None = None
     optimization: dict | None = None
     source: str | None = "manual_selection"
@@ -784,212 +793,6 @@ def get_strategy_signal_direction(backtest):
     return None
 
 
-def build_decision_trace(
-    *,
-    request,
-    strategy,
-    backtest,
-    cmc_signal,
-    v2_requested,
-    v2_opportunity,
-    v2_trade_allowed,
-    portfolio_result,
-    portfolio_items,
-    risk_control,
-    decision,
-    hold_reason,
-    trade_plan,
-    execution_result,
-    execution_mode,
-    live_execution_enabled,
-    daily_guard_reason,
-    agent_analysis,
-):
-    """Build an auditable, frontend-ready explanation for every agent cycle."""
-    current_signal = (backtest or {}).get("current_signal") or {}
-    signal_status = str(current_signal.get("status", "HOLD")).upper()
-    signal_message = current_signal.get("message") or current_signal.get("action") or "No signal detail was returned."
-    tdi = current_signal.get("tdi") or {}
-    market_bias = str((cmc_signal or {}).get("market_bias", "unknown"))
-    confidence = int((agent_analysis or {}).get("confidence_score", 0) or 0)
-    risk_status = str((risk_control or {}).get("status", "UNKNOWN"))
-    execution_attempted = trade_plan is not None and execution_result is not None
-    execution_success = bool((execution_result or {}).get("success")) if execution_attempted else False
-    execution_blocked = bool((execution_result or {}).get("blocked")) if execution_attempted else False
-
-    checks = []
-
-    def add_check(key, label, status, detail, value=None):
-        checks.append({
-            "key": key,
-            "label": label,
-            "status": status,
-            "detail": detail,
-            "value": value,
-        })
-
-    add_check(
-        "market_data",
-        "Market data",
-        "PASS" if (cmc_signal or {}).get("price_usd") is not None else "WARN",
-        (cmc_signal or {}).get("market_data_payment_layer", "Market data source not reported."),
-        (cmc_signal or {}).get("price_usd"),
-    )
-    add_check(
-        "market_bias",
-        "CMC market bias",
-        "INFO" if market_bias.lower() not in {"unknown", ""} else "WARN",
-        f"Current market bias: {market_bias}.",
-        market_bias,
-    )
-    add_check(
-        "strategy_selected",
-        "Strategy selected",
-        "PASS" if strategy else "FAIL",
-        (strategy or {}).get("name", "No strategy selected."),
-        (strategy or {}).get("name"),
-    )
-
-    if v2_requested:
-        add_check(
-            "v2_opportunity_gate",
-            "IKQF v2 opportunity gate",
-            "PASS" if v2_trade_allowed else "FAIL",
-            (v2_opportunity or {}).get("reason") or "IKQF v2 did not return a reason.",
-            (v2_opportunity or {}).get("decision"),
-        )
-
-    add_check(
-        "strategy_signal",
-        "Latest closed-candle signal",
-        "PASS" if signal_status in {"LONG", "SHORT"} else "FAIL",
-        signal_message,
-        signal_status,
-    )
-
-    if tdi:
-        white_buy = bool(tdi.get("white_buy"))
-        white_sell = bool(tdi.get("white_sell"))
-        add_check(
-            "tdi_extreme_band",
-            "TDI extreme band",
-            "PASS" if (safe_float(tdi.get("tdi_fast"), 50) < 32 or safe_float(tdi.get("tdi_fast"), 50) > 68) else "FAIL",
-            f"TDI fast={tdi.get('tdi_fast')}; required below 32 for BUY or above 68 for SELL.",
-            tdi.get("tdi_fast"),
-        )
-        add_check(
-            "tdi_sharkfin_curl",
-            "TDI sharkfin curl",
-            "PASS" if (tdi.get("curling_up") or tdi.get("curling_down")) else "FAIL",
-            f"Curling up={bool(tdi.get('curling_up'))}; curling down={bool(tdi.get('curling_down'))}.",
-            tdi.get("trigger"),
-        )
-        add_check(
-            "tdi_white_signal",
-            "TDI white signal",
-            "PASS" if (white_buy or white_sell) else "FAIL",
-            f"White BUY={white_buy}; white SELL={white_sell}. Turquoise crosses are ignored.",
-            tdi.get("trigger", "none"),
-        )
-
-    add_check(
-        "portfolio_lookup",
-        "Portfolio lookup",
-        "PASS" if portfolio_result.get("success") else "FAIL",
-        f"Portfolio items available: {len(portfolio_items)}.",
-        len(portfolio_items),
-    )
-    add_check(
-        "risk_governor",
-        "Risk governor",
-        "PASS" if risk_status == "SAFE" else ("WARN" if risk_status in {"WARNING", "PORTFOLIO UNAVAILABLE"} else "FAIL"),
-        f"Risk status: {risk_status}; current drawdown={(risk_control or {}).get('current_drawdown_pct', 0)}%.",
-        risk_status,
-    )
-    add_check(
-        "confidence",
-        "Confidence model",
-        "INFO",
-        "Confidence is explanatory context in the current agent cycle; it is not a universal hard execution threshold.",
-        confidence,
-    )
-    add_check(
-        "trade_plan",
-        "Trade plan generated",
-        "PASS" if trade_plan else "FAIL",
-        (trade_plan or {}).get("reason") or hold_reason or get_hold_reason(cmc_signal),
-        None if trade_plan is None else f"{trade_plan.get('from_token')}->{trade_plan.get('to_token')}",
-    )
-
-    if trade_plan:
-        from_token = str(trade_plan.get("from_token", "")).upper()
-        available = next(
-            (safe_float(item.get("balance"), 0) for item in portfolio_items if str(item.get("symbol", "")).upper() == from_token),
-            0.0,
-        )
-        required = safe_float(trade_plan.get("amount"), 0)
-        add_check(
-            "balance",
-            "Available balance",
-            "PASS" if execution_mode == "decision_simulation" or available >= required else "FAIL",
-            f"Available {from_token}: {available}; required: {required}.",
-            available,
-        )
-
-    add_check(
-        "execution_mode",
-        "Execution mode",
-        "INFO",
-        f"Mode={execution_mode}; live enabled={live_execution_enabled}.",
-        execution_mode,
-    )
-    add_check(
-        "execution",
-        "Execution",
-        "NOT_REACHED" if not execution_attempted else ("FAIL" if execution_blocked or not execution_success else "PASS"),
-        (
-            "No execution was attempted because no trade plan was generated."
-            if not execution_attempted
-            else (execution_result or {}).get("safety_message")
-            or (execution_result or {}).get("message")
-            or "Execution layer returned no explanatory message."
-        ),
-        (execution_result or {}).get("mode") if execution_attempted else None,
-    )
-
-    final_reason = (
-        (execution_result or {}).get("safety_message")
-        or hold_reason
-        or (trade_plan or {}).get("reason")
-        or daily_guard_reason
-        or get_hold_reason(cmc_signal)
-    )
-
-    if decision == "HOLD" and not hold_reason and signal_status == "HOLD":
-        final_reason = signal_message
-
-    stopped_at = next((check["label"] for check in checks if check["status"] == "FAIL"), None)
-
-    return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "coin": request.coin,
-        "timeframe": request.timeframe,
-        "risk": request.risk,
-        "strategy": (strategy or {}).get("name"),
-        "signal_status": signal_status,
-        "confidence_score": confidence,
-        "execution_mode": execution_mode,
-        "decision": decision,
-        "trade_generated": trade_plan is not None,
-        "execution_attempted": execution_attempted,
-        "execution_success": execution_success,
-        "stopped_at": stopped_at,
-        "reason": final_reason,
-        "checks": checks,
-        "raw_signal": current_signal,
-    }
-
-
 def utc_day_bounds(now=None):
     now = now or datetime.now(timezone.utc)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1236,6 +1039,24 @@ def maybe_build_forced_trade_close_plan(request, cmc_signal, live_execution_enab
     }
 
 
+
+def reset_paper_portfolio(starting_balance_usdt=1000.0):
+    """Reset only the in-memory paper portfolio; live wallet state is untouched."""
+    starting_balance_usdt = max(0.0, safe_float(starting_balance_usdt, 1000.0))
+
+    PAPER_PORTFOLIO["starting_balance_usdt"] = starting_balance_usdt
+    PAPER_PORTFOLIO["cash_usdt"] = starting_balance_usdt
+    PAPER_PORTFOLIO["bnb_balance"] = 0.0
+    PAPER_PORTFOLIO["realized_pnl_usdt"] = 0.0
+    PAPER_PORTFOLIO["unrealized_pnl_usdt"] = 0.0
+    PAPER_PORTFOLIO["peak_value_usdt"] = starting_balance_usdt
+    PAPER_PORTFOLIO["open_positions"] = []
+    PAPER_PORTFOLIO["closed_trades"] = []
+
+    return get_paper_portfolio_status()
+
+
+
 def get_paper_portfolio_status(price_usd=None):
     price_usd = safe_float(price_usd, 0.0)
 
@@ -1445,36 +1266,409 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
     )
 
     if strategy is None or backtest is None:
-        decision_trace = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+        return {
+            "error": "No strategy results were generated.",
             "coin": request.coin,
             "timeframe": request.timeframe,
             "risk": request.risk,
-            "strategy": None,
-            "signal_status": "UNAVAILABLE",
-            "confidence_score": 0,
-            "execution_mode": str(getattr(request, "execution_mode", "decision_simulation")),
-            "decision": "HOLD",
-            "trade_generated": False,
-            "execution_attempted": False,
-            "execution_success": False,
-            "stopped_at": "Strategy selected",
-            "reason": "No valid strategy was generated.",
-            "checks": [
-                {
-                    "key": "strategy_selected",
-                    "label": "Strategy selected",
-                    "status": "FAIL",
-                    "detail": "No valid strategy was generated.",
-                    "value": None,
-                }
-            ],
-            "raw_signal": {},
+            "cmc_signal": cmc_signal,
         }
+
+    return {
+        "coin": request.coin,
+        "timeframe": request.timeframe,
+        "risk": request.risk,
+        "cmc_signal": cmc_signal,
+        "type": strategy["type"],
+        "reason": (
+            f"CMC market bias is {cmc_signal.get('market_bias', 'unknown')}. "
+            f"The agent compared available private strategies and selected "
+            f"{strategy['name']} for {request.coin} on the {request.timeframe} "
+            f"timeframe using a {request.risk} risk profile."
+        ),
+        "entry": strategy["entry"],
+        "confirmation": strategy["confirmation"],
+        "take_profit": strategy["take_profit"],
+        "stop_loss": strategy["stop_loss"],
+        "risk_governor": strategy["risk_governor"],
+        "backtest": backtest,
+    }
+
+
+def build_optimizer_item_from_v2_opportunity(opportunity, timeframe, risk, cmc_signal):
+    strategy_meta = opportunity.get("strategy") or {}
+    strategy_name = strategy_meta.get("name")
+    strategy = find_strategy_by_name(strategy_name) or {}
+    backtest = opportunity.get("backtest") or {}
+
+    return {
+        "coin": opportunity.get("coin"),
+        "timeframe": timeframe,
+        "risk": risk,
+        "cmc_signal": cmc_signal,
+        "selected_strategy": strategy_name,
+        "type": strategy_meta.get("type") or strategy.get("type"),
+        "risk_adjusted_score": backtest.get("risk_adjusted_score", 0),
+        "backtest": backtest,
+        "entry": strategy.get("entry", "See strategy file."),
+        "confirmation": strategy.get("confirmation", "See strategy file."),
+        "take_profit": strategy.get("take_profit", "See strategy file."),
+        "stop_loss": strategy.get("stop_loss", "See strategy file."),
+        "risk_governor": strategy.get("risk_governor", {}),
+        "v2_confidence": opportunity.get("confidence"),
+        "v2_allocation": opportunity.get("allocation"),
+        "v2_candidate": opportunity.get("candidate"),
+    }
+
+
+@app.post("/optimize-strategy")
+def optimize_strategy(request: OptimizeRequest, _operator_ok: bool = Depends(require_operator_key)):
+    timeframes = ["5M", "15M", "1H", "4H", "1D"]
+    risk_levels = ["low", "medium", "high"]
+    strategies = load_available_strategies()
+
+    if is_v2_auto_request(request.coin, None):
+        seed_signal = get_cmc_signal(get_v2_seed_coin(request.coin, None))
+        v2_result = build_v2_opportunity(
+            cmc_signal=seed_signal,
+            strategies=strategies,
+            run_backtest_fn=run_backtest,
+            timeframe=request.timeframe,
+            risk=request.risk,
+            initial_capital=request.initial_capital,
+        )
+
+        best = v2_result.get("best_opportunity") or None
+
+        if not best:
+            return {
+                "coin": request.coin,
+                "mode": "v2_opportunity_optimization",
+                "cmc_signal": seed_signal,
+                "tested_combinations": 0,
+                "eligible_combinations": 0,
+                "error": "IKQF v2 found no opportunity.",
+                "all_results": [],
+                "frequency_ranked_results": [],
+                "v2_opportunity": v2_result,
+            }
+
+        selected_coin = best.get("coin") or "ETH"
+        selected_signal = get_cmc_signal(selected_coin)
+        all_results = [
+            build_optimizer_item_from_v2_opportunity(item, request.timeframe, request.risk, selected_signal)
+            for item in (v2_result.get("top_opportunities") or [])
+        ]
+        best_result = build_optimizer_item_from_v2_opportunity(best, request.timeframe, request.risk, selected_signal)
+        frequency_ranked_results = sorted(all_results, key=frequency_ranking_key, reverse=True)
+
+        return {
+            "coin": selected_coin,
+            "mode": "v2_opportunity_optimization",
+            "cmc_signal": selected_signal,
+            "tested_combinations": len(all_results),
+            "eligible_combinations": len([item for item in all_results if is_backtest_eligible(item.get("backtest", {}))]),
+            "best_setup": best_result,
+            "all_results": all_results,
+            "frequency_ranked_results": frequency_ranked_results,
+            "v2_opportunity": v2_result,
+        }
+
+    cmc_signal = get_cmc_signal(request.coin)
+
+    results = []
+
+    for strategy in strategies:
+        for timeframe in timeframes:
+            for risk in risk_levels:
+                backtest = run_backtest(
+                    strategy=strategy,
+                    coin=request.coin,
+                    timeframe=timeframe,
+                    risk=risk,
+                    initial_capital=request.initial_capital,
+                )
+
+                results.append(
+                    {
+                        "coin": request.coin,
+                        "timeframe": timeframe,
+                        "risk": risk,
+                        "cmc_signal": cmc_signal,
+                        "selected_strategy": strategy["name"],
+                        "type": strategy["type"],
+                        "risk_adjusted_score": backtest["risk_adjusted_score"],
+                        "backtest": backtest,
+                        "entry": strategy["entry"],
+                        "confirmation": strategy["confirmation"],
+                        "take_profit": strategy["take_profit"],
+                        "stop_loss": strategy["stop_loss"],
+                        "risk_governor": strategy["risk_governor"],
+                    }
+                )
+
+    eligible_results = [
+        item for item in results
+        if is_backtest_eligible(item["backtest"])
+    ]
+
+    ranking_pool = eligible_results if eligible_results else results
+
+    if not ranking_pool:
+        return {
+            "coin": request.coin,
+            "mode": "auto_optimization",
+            "cmc_signal": cmc_signal,
+            "tested_combinations": 0,
+            "eligible_combinations": 0,
+            "error": "No optimizer results were generated.",
+            "all_results": [],
+        }
+
+    best_result = max(ranking_pool, key=lambda item: item["risk_adjusted_score"])
+
+    frequency_ranked_results = sorted(
+        results,
+        key=frequency_ranking_key,
+        reverse=True,
+    )
+
+    return {
+        "coin": request.coin,
+        "mode": "auto_optimization",
+        "cmc_signal": cmc_signal,
+        "tested_combinations": len(results),
+        "eligible_combinations": len(eligible_results),
+        "best_setup": best_result,
+        "all_results": results,
+        "frequency_ranked_results": frequency_ranked_results,
+    }
+
+
+@app.get("/v2/market-scan")
+def v2_market_scan(
+    timeframe: str = "5M",
+    risk: str = "medium",
+    initial_capital: float = 10000,
+    _operator_ok: bool = Depends(require_operator_key),
+):
+    """Run the IKQF v2 opportunity engine without executing a trade."""
+    cmc_signal = get_cmc_signal("BTC")
+    return build_v2_opportunity(
+        cmc_signal=cmc_signal,
+        strategies=load_available_strategies(),
+        run_backtest_fn=run_backtest,
+        timeframe=timeframe,
+        risk=risk,
+        initial_capital=initial_capital,
+    )
+
+
+@app.get("/twak-status")
+def twak_status():
+    return get_twak_status()
+
+
+@app.get("/agent-config")
+def agent_config():
+    return {
+        "success": True,
+        "mode": "agent_config",
+        "setup": get_saved_agent_setup_snapshot(),
+        "active_config": get_autonomous_config_snapshot(),
+        "autonomous_running": AUTONOMOUS_STATE["running"],
+    }
+
+
+@app.post("/agent-config")
+def save_agent_config(request: AgentSetupRequest, _operator_ok: bool = Depends(require_operator_key)):
+    setup = update_saved_agent_setup(
+        coin=request.coin,
+        timeframe=request.timeframe,
+        risk=request.risk,
+        initial_capital=request.initial_capital,
+        live_execution=request.live_execution,
+        execution_mode=request.execution_mode,
+        trade_size=request.trade_size,
+        interval_minutes=request.interval_minutes,
+        selected_strategy=request.selected_strategy,
+        strategy_only_mode=request.strategy_only_mode,
+        result_snapshot=request.result_snapshot,
+        optimization=request.optimization,
+        source=request.source or "manual_selection",
+    )
+
+    return {
+        "success": True,
+        "mode": "agent_config",
+        "setup": setup,
+        "message": "Agent setup saved on the backend.",
+    }
+
+
+@app.post("/register-agent")
+def register_agent():
+    status = get_twak_status()
+
+    if status["status"] != "configured":
+        return {
+            "success": False,
+            "registration": "not_ready",
+            "message": "TWAK agent address is missing.",
+        }
+
+    return {
+        "success": True,
+        "registration": "ready_for_onchain_registration",
+        "agent_address": status["agent_address"],
+        "chain": status["chain"],
+        "message": (
+            "TWAK agent address is configured. On-chain registration must be "
+            "completed with TWAK CLI or MCP."
+        ),
+    }
+
+
+@app.get("/cmc-skill-hub/find")
+async def cmc_skill_hub_find(query: str = "btc price"):
+    return await find_cmc_skill(query)
+
+@app.get("/x402-status")
+def x402_status(coin: str = "ETH", _operator_ok: bool = Depends(require_operator_key)):
+    return get_cmc_x402_quote(coin)
+
+
+@app.get("/debug-strategies")
+def debug_strategies():
+    return {
+        "base_dir": str(BASE_DIR),
+        "strategies_dir": str(STRATEGIES_DIR),
+        "exists": STRATEGIES_DIR.exists(),
+        "files": [f.name for f in STRATEGIES_DIR.glob("*")]
+        if STRATEGIES_DIR.exists()
+        else [],
+    }
+
+
+@app.post("/agent-cycle")
+def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require_operator_key)):
+    requested_strategy_only_mode = getattr(request, "strategy_only_mode", None)
+    if requested_strategy_only_mode is None:
+        strategy_only_mode = bool(load_saved_agent_setup().get("strategy_only_mode", False))
+    else:
+        strategy_only_mode = bool(requested_strategy_only_mode)
+
+    # Strategy-only mode is valid only for an explicitly selected manual strategy.
+    manual_strategy_requested = bool(
+        request.selected_strategy
+        and not is_v2_auto_request(None, request.selected_strategy)
+    )
+    v2_requested = False if strategy_only_mode else is_v2_auto_request(request.coin, request.selected_strategy)
+    original_requested_coin = request.coin
+    original_requested_strategy = request.selected_strategy
+    cmc_seed_coin = get_v2_seed_coin(request.coin, request.selected_strategy)
+
+    cmc_signal = get_cmc_signal(cmc_seed_coin)
+
+    x402_market_data = get_cmc_x402_quote(cmc_seed_coin)
+    cmc_signal["x402"] = x402_market_data
+
+    if x402_market_data.get("success") and x402_market_data.get("price_usd") is not None:
+        cmc_signal["price_usd"] = x402_market_data["price_usd"]
+        cmc_signal["x402_used_in_decision"] = True
+        cmc_signal["market_data_payment_layer"] = "CoinMarketCap x402 paid quote"
+    else:
+        cmc_signal["x402_used_in_decision"] = False
+        cmc_signal["market_data_payment_layer"] = "CMC API fallback; x402 not paid/available"
+
+    v2_opportunity = None
+    v2_trade_allowed = True
+
+    if v2_requested:
+        v2_opportunity = build_v2_opportunity(
+            cmc_signal=cmc_signal,
+            strategies=load_available_strategies(),
+            run_backtest_fn=run_backtest,
+            timeframe=request.timeframe,
+            risk=request.risk,
+            initial_capital=request.initial_capital,
+        )
+        v2_trade_allowed = v2_opportunity.get("decision") == "TRADE_BEST_OPPORTUNITY"
+        best = v2_opportunity.get("best_opportunity") or {}
+        if best.get("coin"):
+            request.coin = best["coin"]
+            selected_name = (best.get("strategy") or {}).get("name")
+            if selected_name:
+                request.selected_strategy = selected_name
+            cmc_signal = get_cmc_signal(request.coin)
+            x402_market_data = get_cmc_x402_quote(request.coin)
+            cmc_signal["x402"] = x402_market_data
+            if x402_market_data.get("success") and x402_market_data.get("price_usd") is not None:
+                cmc_signal["price_usd"] = x402_market_data["price_usd"]
+                cmc_signal["x402_used_in_decision"] = True
+                cmc_signal["market_data_payment_layer"] = "CoinMarketCap x402 paid quote"
+            else:
+                cmc_signal["x402_used_in_decision"] = False
+                cmc_signal["market_data_payment_layer"] = "CMC API fallback; x402 not paid/available"
+            cmc_signal["v2_auto_requested_coin"] = original_requested_coin
+            cmc_signal["v2_auto_requested_strategy"] = original_requested_strategy
+            cmc_signal["v2_auto_selected_coin"] = request.coin
+            cmc_signal["v2_auto_selected_strategy"] = selected_name
+            cmc_signal["v2_trade_allowed"] = v2_trade_allowed
+
+    execution_mode = str(getattr(request, "execution_mode", "decision_simulation") or "decision_simulation").lower()
+    live_execution_enabled = execution_mode == "live_trading" or request.live_execution is True
+    paper_trading_enabled = execution_mode == "paper_trading"
+
+    if strategy_only_mode:
+        if manual_strategy_requested:
+            strategy = find_strategy_by_name(request.selected_strategy)
+        else:
+            strategy = None
+
+        if strategy is not None:
+            backtest = run_backtest(
+                strategy=strategy,
+                coin=request.coin,
+                timeframe=request.timeframe,
+                risk=request.risk,
+                initial_capital=request.initial_capital,
+            )
+            compared_results = []
+        else:
+            backtest = None
+            compared_results = []
+    elif request.selected_strategy:
+        strategy = find_strategy_by_name(request.selected_strategy)
+
+        if strategy is not None:
+            backtest = run_backtest(
+                strategy=strategy,
+                coin=request.coin,
+                timeframe=request.timeframe,
+                risk=request.risk,
+                initial_capital=request.initial_capital,
+            )
+            compared_results = []
+        else:
+            strategy, backtest, compared_results = pick_best_strategy(
+                coin=request.coin,
+                timeframe=request.timeframe,
+                risk=request.risk,
+                initial_capital=request.initial_capital,
+            )
+    else:
+        strategy, backtest, compared_results = pick_best_strategy(
+            coin=request.coin,
+            timeframe=request.timeframe,
+            risk=request.risk,
+            initial_capital=request.initial_capital,
+        )
+
+    if strategy is None or backtest is None:
         event = log_trade(
             {
                 "status": "no_strategy",
-                "decision_trace": decision_trace,
                 "coin": request.coin,
                 "timeframe": request.timeframe,
                 "risk": request.risk,
@@ -1484,11 +1678,17 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
             }
         )
 
+        no_strategy_reason = (
+            f"Strategy-only mode could not load the selected manual strategy: {request.selected_strategy}."
+            if strategy_only_mode
+            else "No valid strategy was generated."
+        )
+
         return {
             "success": False,
             "decision": "HOLD",
-            "reason": "No valid strategy was generated.",
-            "decision_trace": decision_trace,
+            "reason": no_strategy_reason,
+            "strategy_only_mode": strategy_only_mode,
             "cmc_signal": cmc_signal,
             "x402": x402_market_data,
             "v2_opportunity": v2_opportunity,
@@ -1541,11 +1741,22 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
     trade_plan = None
     execution_result = None
     daily_qualification = get_daily_qualification_status()
-    daily_guard_should_trade, daily_guard_reason = should_force_daily_qualification_trade(
-        live_execution_enabled=live_execution_enabled
-    )
 
-    forced_close_plan = maybe_build_forced_trade_close_plan(request, cmc_signal, live_execution_enabled=live_execution_enabled)
+    if strategy_only_mode:
+        # The selected strategy controls entries and exits. Competition qualification
+        # trades and their forced closes must not override it.
+        daily_guard_should_trade = False
+        daily_guard_reason = "STRATEGY ONLY MODE: daily qualification forcing is bypassed."
+        forced_close_plan = None
+    else:
+        daily_guard_should_trade, daily_guard_reason = should_force_daily_qualification_trade(
+            live_execution_enabled=live_execution_enabled
+        )
+        forced_close_plan = maybe_build_forced_trade_close_plan(
+            request,
+            cmc_signal,
+            live_execution_enabled=live_execution_enabled,
+        )
 
     if forced_close_plan is not None:
         decision = "DAILY_QUALIFICATION_CLOSE"
@@ -1624,7 +1835,11 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
                     "The agent cannot profit from a short without margin/perpetuals or an existing asset position, so it holds instead."
                 )
 
-        elif ("bear" in market_bias or "risk-off" in market_bias) and target_balance > 0:
+        elif (
+            not strategy_only_mode
+            and ("bear" in market_bias or "risk-off" in market_bias)
+            and target_balance > 0
+        ):
             decision = f"REDUCE_{target_token}_RISK"
             trade_amount = str(round(min(requested_trade_size, target_balance), 8))
 
@@ -1644,11 +1859,19 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
 
         else:
             decision = "HOLD"
-            hold_reason = hold_reason or (
-                (v2_opportunity or {}).get("reason")
-                if v2_requested and (v2_opportunity or {}).get("decision") == "HOLD_USDT"
-                else get_hold_reason(cmc_signal)
-            )
+            if strategy_only_mode:
+                current_signal = (backtest or {}).get("current_signal") or {}
+                hold_reason = (
+                    current_signal.get("message")
+                    or current_signal.get("action")
+                    or f"No active {strategy['name']} entry or exit signal on the latest checked candle."
+                )
+            else:
+                hold_reason = hold_reason or (
+                    (v2_opportunity or {}).get("reason")
+                    if v2_requested and (v2_opportunity or {}).get("decision") == "HOLD_USDT"
+                    else get_hold_reason(cmc_signal)
+                )
 
     if trade_plan is not None:
         if live_execution_enabled and risk_control["status"] == "DRAWDOWN LIMIT BREACHED":
@@ -1764,31 +1987,9 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
         risk_control=risk_control,
     )
 
-    decision_trace = build_decision_trace(
-        request=request,
-        strategy=strategy,
-        backtest=backtest,
-        cmc_signal=cmc_signal,
-        v2_requested=v2_requested,
-        v2_opportunity=v2_opportunity,
-        v2_trade_allowed=v2_trade_allowed,
-        portfolio_result=portfolio_result,
-        portfolio_items=portfolio_items,
-        risk_control=risk_control,
-        decision=decision,
-        hold_reason=hold_reason,
-        trade_plan=trade_plan,
-        execution_result=execution_result,
-        execution_mode=execution_mode,
-        live_execution_enabled=live_execution_enabled,
-        daily_guard_reason=daily_guard_reason,
-        agent_analysis=agent_analysis,
-    )
-
     event = log_trade(
         {
             "status": "agent_cycle",
-            "decision_trace": decision_trace,
             "decision": decision,
             "coin": request.coin,
             "timeframe": request.timeframe,
@@ -1796,6 +1997,7 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
             "live_execution": live_execution_enabled,
             "execution_mode": execution_mode,
             "selected_strategy_requested": request.selected_strategy,
+            "strategy_only_mode": strategy_only_mode,
             "cmc_signal": cmc_signal,
             "x402": x402_market_data,
             "v2_opportunity": v2_opportunity,
@@ -1820,7 +2022,6 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
     return {
         "success": True,
         "mode": "agent_cycle",
-        "decision_trace": decision_trace,
         "decision": decision,
         "portfolio": portfolio_result,
         "paper_portfolio": get_paper_portfolio_status(cmc_signal.get("price_usd")) if paper_trading_enabled else None,
@@ -1830,6 +2031,7 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
         "x402": x402_market_data,
         "v2_opportunity": v2_opportunity,
         "selected_strategy_requested": request.selected_strategy,
+        "strategy_only_mode": strategy_only_mode,
         "selected_strategy": strategy["name"],
         "risk_adjusted_score": risk_score,
         "backtest": backtest,
@@ -1839,33 +2041,12 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
         "risk_control": agent_analysis["risk_control"],
         "reason": hold_reason or (trade_plan or {}).get("reason") or get_hold_reason(cmc_signal),
         "daily_qualification": get_daily_qualification_status(),
+        "daily_guard_reason": daily_guard_reason,
         "trade_size": request.trade_size,
         "trade_plan": trade_plan,
         "execution_result": execution_result,
         "event": event,
     }
-
-
-@app.get("/decision-trace/latest")
-def latest_decision_trace():
-    for record in reversed(read_trade_log(500)):
-        trace = record.get("decision_trace")
-        if trace:
-            return {"success": True, "decision_trace": trace, "event": record}
-    return {"success": False, "decision_trace": None, "reason": "No decision trace has been logged yet."}
-
-
-@app.get("/decision-trace/recent")
-def recent_decision_traces(limit: int = 25):
-    safe_limit = min(max(int(limit), 1), 200)
-    traces = []
-    for record in reversed(read_trade_log(1000)):
-        trace = record.get("decision_trace")
-        if trace:
-            traces.append(trace)
-        if len(traces) >= safe_limit:
-            break
-    return {"success": True, "count": len(traces), "decision_traces": traces}
 
 
 @app.post("/execute-trade")
@@ -1946,8 +2127,8 @@ def update_autonomous_state_from_result(result):
     now = datetime.now(timezone.utc)
     next_run = now + timedelta(minutes=AUTONOMOUS_STATE["interval_minutes"])
 
-    if (result.get("decision_trace") or {}).get("reason"):
-        reason = result["decision_trace"]["reason"]
+    if result.get("reason"):
+        reason = result.get("reason")
     elif result.get("daily_guard_reason"):
         reason = result.get("daily_guard_reason")
     elif result.get("decision") == "HOLD":
@@ -1986,6 +2167,11 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
     global AUTONOMOUS_CONFIG
 
     now = datetime.now(timezone.utc)
+    requested_strategy_only_mode = getattr(request, "strategy_only_mode", None)
+    if requested_strategy_only_mode is None:
+        strategy_only_mode = bool(load_saved_agent_setup().get("strategy_only_mode", False))
+    else:
+        strategy_only_mode = bool(requested_strategy_only_mode)
 
     AUTONOMOUS_CONFIG = AgentCycleRequest(
         coin=request.coin,
@@ -1997,6 +2183,7 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         trade_size=request.trade_size,
         interval_minutes=request.interval_minutes,
         selected_strategy=request.selected_strategy,
+        strategy_only_mode=strategy_only_mode,
     )
 
     AUTONOMOUS_STATE["running"] = True
@@ -2017,6 +2204,7 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         trade_size=request.trade_size,
         interval_minutes=request.interval_minutes,
         selected_strategy=request.selected_strategy,
+        strategy_only_mode=strategy_only_mode,
         result_snapshot=request.result_snapshot,
         optimization=request.optimization,
         source=request.setup_source or "autonomous_start",
@@ -2036,6 +2224,7 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         "interval_minutes": request.interval_minutes,
         "trade_size": request.trade_size,
         "execution_mode": request.execution_mode,
+        "strategy_only_mode": strategy_only_mode,
         "active_config": get_autonomous_config_snapshot(),
         "saved_agent_setup": get_saved_agent_setup_snapshot(),
         "next_run": AUTONOMOUS_STATE["next_run"],
