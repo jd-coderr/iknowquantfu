@@ -102,7 +102,10 @@ def operator_unlock(_operator_ok: bool = Depends(require_operator_key)):
     }
 
 BASE_DIR = Path(__file__).resolve().parent
+STATE_DIR = Path(os.getenv("IKQF_STATE_DIR", str(BASE_DIR))).expanduser()
+STATE_DIR.mkdir(parents=True, exist_ok=True)
 STRATEGIES_DIR = BASE_DIR / "strategies"
+WALLET_BASELINE_STATE_FILE = STATE_DIR / "wallet_baseline_state.json"
 
 STRATEGY_FILES = [
     "vwap_reversion.json",
@@ -147,8 +150,9 @@ AUTONOMOUS_STATE = {
 AUTONOMOUS_THREAD = None
 AUTONOMOUS_CONFIG = None
 
-AGENT_SETUP_STATE_FILE = BASE_DIR / "agent_setup_state.json"
+AGENT_SETUP_STATE_FILE = STATE_DIR / "agent_setup_state.json"
 SAVED_AGENT_SETUP = None
+WALLET_BASELINE_CACHE = None
 
 
 def get_default_agent_setup():
@@ -523,6 +527,159 @@ def safe_float(value, default=0.0):
         return default
 
 
+def load_wallet_baseline_state():
+    """Load the immutable live-wallet baseline captured when the agent first starts."""
+    global WALLET_BASELINE_CACHE
+
+    if WALLET_BASELINE_CACHE is not None:
+        return WALLET_BASELINE_CACHE
+
+    baseline = None
+
+    if WALLET_BASELINE_STATE_FILE.exists():
+        try:
+            loaded = json.loads(WALLET_BASELINE_STATE_FILE.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                baseline = loaded
+        except Exception:
+            baseline = None
+
+    WALLET_BASELINE_CACHE = baseline
+    return WALLET_BASELINE_CACHE
+
+
+def persist_wallet_baseline_state(baseline):
+    """Persist the baseline atomically so a partial write cannot corrupt it."""
+    global WALLET_BASELINE_CACHE
+
+    temp_file = WALLET_BASELINE_STATE_FILE.with_suffix(".tmp")
+    temp_file.write_text(json.dumps(baseline, indent=2, default=str), encoding="utf-8")
+    temp_file.replace(WALLET_BASELINE_STATE_FILE)
+    WALLET_BASELINE_CACHE = baseline
+    return baseline
+
+
+def get_wallet_baseline_snapshot():
+    baseline = load_wallet_baseline_state()
+    if not isinstance(baseline, dict):
+        return None
+    return json.loads(json.dumps(baseline, default=str))
+
+
+def restore_wallet_baseline_into_risk_state():
+    """Keep RISK_STATE tied to the original persisted start value after restarts."""
+    baseline = load_wallet_baseline_state()
+
+    if not isinstance(baseline, dict):
+        return None
+
+    baseline_value = safe_float(baseline.get("total_value_usd"), 0.0)
+
+    if baseline_value >= 0:
+        RISK_STATE["baseline_portfolio_value_usd"] = baseline_value
+        current_peak = RISK_STATE.get("peak_portfolio_value_usd")
+        if current_peak is None:
+            RISK_STATE["peak_portfolio_value_usd"] = baseline_value
+        else:
+            RISK_STATE["peak_portfolio_value_usd"] = max(
+                safe_float(current_peak, baseline_value),
+                baseline_value,
+            )
+
+    return baseline
+
+
+def build_wallet_baseline_snapshot(portfolio_items, agent_address=None, captured_at=None):
+    """Freeze balances, per-token USD prices, token USD values, and total wallet value."""
+    captured_at = captured_at or datetime.now(timezone.utc).isoformat()
+    assets = []
+
+    for item in portfolio_items:
+        if not isinstance(item, dict):
+            continue
+
+        symbol = str(item.get("symbol") or "UNKNOWN").upper()
+        raw_balance = item.get("balance", 0)
+        balance = safe_float(raw_balance, 0.0)
+        usd_value = safe_float(item.get("usdValue", 0), 0.0)
+        price_usd = (usd_value / balance) if balance > 0 else 0.0
+
+        assets.append({
+            "symbol": symbol,
+            "balance": str(raw_balance),
+            "balance_numeric": balance,
+            "price_usd": round(price_usd, 12),
+            "usd_value_usd": round(usd_value, 12),
+            "chain": item.get("chain"),
+            "type": item.get("type"),
+        })
+
+    assets.sort(key=lambda item: (-safe_float(item.get("usd_value_usd"), 0.0), item.get("symbol", "")))
+    total_value = sum(safe_float(item.get("usd_value_usd"), 0.0) for item in assets)
+
+    return {
+        "version": 1,
+        "captured_at": captured_at,
+        "agent_address": agent_address or get_configured_agent_address(),
+        "chain": "bsc",
+        "network": "BNB Smart Chain / BSC",
+        "total_value_usd": round(total_value, 12),
+        "assets": assets,
+    }
+
+
+def ensure_wallet_baseline_captured(force=False):
+    """Capture once on first Run Agent; never overwrite unless explicitly forced."""
+    existing = load_wallet_baseline_state()
+
+    if isinstance(existing, dict) and not force:
+        restore_wallet_baseline_into_risk_state()
+        return {
+            "success": True,
+            "created": False,
+            "baseline": get_wallet_baseline_snapshot(),
+            "message": "Existing wallet baseline preserved.",
+        }
+
+    agent_address = get_configured_agent_address()
+    result = run_twak_portfolio(address=agent_address)
+    raw_items = result.get("portfolio") or [] if isinstance(result, dict) else []
+    portfolio_items = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+
+    if not isinstance(result, dict) or not result.get("success") or not portfolio_items:
+        return {
+            "success": False,
+            "created": False,
+            "baseline": get_wallet_baseline_snapshot(),
+            "message": "Wallet baseline was not changed because the live portfolio could not be read.",
+            "portfolio_result": result,
+        }
+
+    snapshot = build_wallet_baseline_snapshot(
+        portfolio_items=portfolio_items,
+        agent_address=agent_address,
+    )
+
+    try:
+        persist_wallet_baseline_state(snapshot)
+    except Exception as error:
+        return {
+            "success": False,
+            "created": False,
+            "baseline": get_wallet_baseline_snapshot(),
+            "message": f"Wallet baseline could not be persisted: {str(error)}",
+        }
+
+    restore_wallet_baseline_into_risk_state()
+
+    return {
+        "success": True,
+        "created": True,
+        "baseline": get_wallet_baseline_snapshot(),
+        "message": "Wallet baseline captured and persisted.",
+    }
+
+
 def extract_tx_hash_from_text(value):
     text = "" if value is None else str(value)
     match = re.search(r"0x[a-fA-F0-9]{64}", text)
@@ -586,6 +743,8 @@ def get_token_price_usd(portfolio_items, symbol):
 
 
 def update_risk_state(portfolio_items, portfolio_available=True):
+    restore_wallet_baseline_into_risk_state()
+
     if not portfolio_available or not portfolio_items:
         RISK_STATE["status"] = "PORTFOLIO UNAVAILABLE"
         return dict(RISK_STATE)
@@ -593,11 +752,14 @@ def update_risk_state(portfolio_items, portfolio_available=True):
     portfolio_value = get_portfolio_value_usd_from_items(portfolio_items)
 
     if portfolio_value > 0:
-        if RISK_STATE["baseline_portfolio_value_usd"] is None:
-            RISK_STATE["baseline_portfolio_value_usd"] = portfolio_value
-
+        # The start value is captured only by /autonomous/start (or an explicit reset).
+        # Agent cycles must never silently replace it with a newer wallet value.
         if RISK_STATE["peak_portfolio_value_usd"] is None:
-            RISK_STATE["peak_portfolio_value_usd"] = portfolio_value
+            RISK_STATE["peak_portfolio_value_usd"] = (
+                RISK_STATE["baseline_portfolio_value_usd"]
+                if RISK_STATE["baseline_portfolio_value_usd"] is not None
+                else portfolio_value
+            )
 
         RISK_STATE["peak_portfolio_value_usd"] = max(
             safe_float(RISK_STATE["peak_portfolio_value_usd"]),
@@ -2167,6 +2329,30 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
     global AUTONOMOUS_CONFIG
 
     now = datetime.now(timezone.utc)
+
+    # Freeze the live wallet baseline before the autonomous loop can make its first trade.
+    # Existing baselines are immutable and are preserved across stop/start cycles.
+    wallet_baseline_result = ensure_wallet_baseline_captured(force=False)
+
+    # A live agent must never start without a frozen start-wallet snapshot.
+    # This guarantees that no first cycle/trade can happen before START VALUE,
+    # balances, per-token prices, and token USD values have been persisted.
+    if not wallet_baseline_result.get("success") or not wallet_baseline_result.get("baseline"):
+        AUTONOMOUS_STATE["running"] = False
+        AUTONOMOUS_STATE["next_run"] = None
+        AUTONOMOUS_STATE["last_reason"] = (
+            wallet_baseline_result.get("message")
+            or "Autonomous start blocked: wallet baseline could not be captured."
+        )
+        return {
+            "success": False,
+            "mode": "autonomous",
+            "status": "blocked",
+            "wallet_baseline": get_wallet_baseline_snapshot(),
+            "wallet_baseline_capture": wallet_baseline_result,
+            "message": AUTONOMOUS_STATE["last_reason"],
+        }
+
     requested_strategy_only_mode = getattr(request, "strategy_only_mode", None)
     if requested_strategy_only_mode is None:
         strategy_only_mode = bool(load_saved_agent_setup().get("strategy_only_mode", False))
@@ -2227,6 +2413,8 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         "strategy_only_mode": strategy_only_mode,
         "active_config": get_autonomous_config_snapshot(),
         "saved_agent_setup": get_saved_agent_setup_snapshot(),
+        "wallet_baseline": get_wallet_baseline_snapshot(),
+        "wallet_baseline_capture": wallet_baseline_result,
         "next_run": AUTONOMOUS_STATE["next_run"],
         "message": "Autonomous backend loop started.",
     }
@@ -2257,6 +2445,7 @@ def autonomous_status():
         "network": "BNB Smart Chain / BSC",
         "active_config": get_autonomous_config_snapshot(),
         "saved_agent_setup": get_saved_agent_setup_snapshot(),
+        "wallet_baseline": get_wallet_baseline_snapshot(),
         **AUTONOMOUS_STATE,
     }
 
@@ -2306,6 +2495,7 @@ def portfolio():
         "chain": "bsc",
         "network": "BNB Smart Chain / BSC",
         "result": result,
+        "wallet_baseline": get_wallet_baseline_snapshot(),
         "event": event,
     }
 
@@ -2317,11 +2507,37 @@ def trade_log(limit: int = 50):
         "records": read_trade_log(limit),
     }
 
+@app.get("/wallet-baseline")
+def wallet_baseline():
+    restore_wallet_baseline_into_risk_state()
+    return {
+        "success": True,
+        "wallet_baseline": get_wallet_baseline_snapshot(),
+    }
+
+
+@app.post("/wallet-baseline/reset")
+def wallet_baseline_reset(_operator_ok: bool = Depends(require_operator_key)):
+    result = ensure_wallet_baseline_captured(force=True)
+    return {
+        "success": result.get("success", False),
+        "wallet_baseline": get_wallet_baseline_snapshot(),
+        "capture": result,
+        "message": (
+            "Wallet baseline intentionally reset to the current live wallet snapshot."
+            if result.get("success")
+            else result.get("message")
+        ),
+    }
+
+
 @app.get("/risk-status")
 def risk_status():
+    restore_wallet_baseline_into_risk_state()
     return {
         "success": True,
         "risk_control": RISK_STATE,
+        "wallet_baseline": get_wallet_baseline_snapshot(),
     }
 
 
