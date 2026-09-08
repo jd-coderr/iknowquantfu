@@ -65,9 +65,8 @@ function App() {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [tradeHistory, setTradeHistory] = useState([]);
   const [showOnlyRealTrades, setShowOnlyRealTrades] = useState(false);
-  // Immutable live-wallet baseline. This comes only from the backend snapshot
-  // captured before the agent's first autonomous cycle. It is never derived
-  // from the browser's current portfolio value.
+  // Immutable live-wallet baseline. Captured by the backend before the first
+  // autonomous cycle and persisted outside browser state.
   const [walletBaseline, setWalletBaseline] = useState(null);
   const [liveExecution, setLiveExecution] = useState(false);
   const [executionMode, setExecutionMode] = useState(() => getSavedSetting("ikqf_execution_mode", ""));
@@ -92,7 +91,6 @@ function App() {
   const [manualOverrideTimeframe, setManualOverrideTimeframe] = useState(() => getSavedSetting("ikqf_manual_override_timeframe", "1H"));
   const [manualOverrideRisk, setManualOverrideRisk] = useState(() => getSavedSetting("ikqf_manual_override_risk", "medium"));
   const [manualStrategy, setManualStrategy] = useState(() => getSavedSetting("ikqf_manual_strategy", ""));
-  const [strategyOnlyMode, setStrategyOnlyMode] = useState(() => getSavedSetting("ikqf_strategy_only_mode", "false") === "true");
   const [agentStopConfirmed, setAgentStopConfirmed] = useState(false);
   const [walletAddress, setWalletAddress] = useState(null);
   const [walletChainId, setWalletChainId] = useState(null);
@@ -397,7 +395,6 @@ function App() {
 
     setOptimizerOverrideKey(rowKey);
     setStrategyControlMode("manual");
-    setStrategyOnlyMode(true);
     setManualOverrideStrategy(item.selected_strategy || "");
     setManualOverrideTimeframe(item.timeframe || timeframe);
     setManualOverrideRisk(item.risk || risk);
@@ -415,7 +412,6 @@ function App() {
       timeframe: item.timeframe || timeframe,
       risk: item.risk || risk,
       selected_strategy: item.selected_strategy,
-      strategy_only_mode: true,
       result_snapshot: overrideResult,
       optimization: overrideResult?.optimization || result?.optimization || null,
       source: "optimizer_table_override",
@@ -526,8 +522,6 @@ function App() {
         ? buildResultFromOptimizerSetup(optimizerPick, "auto_optimization")
         : result;
 
-      setStrategyControlMode("auto");
-      setStrategyOnlyMode(false);
       setManualStrategy("");
       setOptimizerOverrideKey("");
       setAutoOptimized(hasOptimizerPick);
@@ -545,7 +539,6 @@ function App() {
         timeframe: optimizerPick?.timeframe || timeframe,
         risk: optimizerPick?.risk || risk,
         selected_strategy: optimizerPick?.selected_strategy || result?.selected_strategy || null,
-        strategy_only_mode: false,
         result_snapshot: optimizerResult || null,
         optimization: optimizerResult?.optimization || result?.optimization || null,
         source: hasOptimizerPick ? "auto_optimization" : "manual_selection",
@@ -563,9 +556,6 @@ function App() {
       ? buildResultFromOptimizerSetup(overrideSetup, source)
       : result;
 
-    const selectedIsAuto = isAutoStrategyLabel(selectedStrategy);
-    setStrategyControlMode(selectedIsAuto ? "v2" : "manual");
-    setStrategyOnlyMode(!selectedIsAuto);
     setManualStrategy(selectedStrategy);
     setOptimizerOverrideKey("");
     setAutoOptimized(false);
@@ -583,7 +573,6 @@ function App() {
       timeframe: overrideSetup?.timeframe || timeframe,
       risk: overrideSetup?.risk || risk,
       selected_strategy: selectedStrategy,
-      strategy_only_mode: !isAutoStrategyLabel(selectedStrategy),
       result_snapshot: overrideResult || null,
       optimization: overrideResult?.optimization || result?.optimization || null,
       source,
@@ -623,7 +612,6 @@ function App() {
     }
 
     if (strategyControlMode === "v2") {
-      setStrategyOnlyMode(false);
       setManualStrategy(AUTO_STRATEGY_LABEL);
       setOptimizerOverrideKey("");
       setAutoOptimized(false);
@@ -636,7 +624,6 @@ function App() {
         timeframe,
         risk,
         selected_strategy: AUTO_STRATEGY_LABEL,
-        strategy_only_mode: false,
         result_snapshot: null,
         optimization: result?.optimization || null,
         source: "v2_auto_mode",
@@ -657,7 +644,6 @@ function App() {
         }, "manual_strategy_override")
       : buildManualOverrideFallbackResult(nextStrategy, nextTimeframe, nextRisk);
 
-    setStrategyOnlyMode(true);
     setManualStrategy(nextStrategy);
     setOptimizerOverrideKey(optimizerSetup ? getOptimizerRowKey(optimizerSetup) : "manual_override");
     setAutoOptimized(false);
@@ -672,7 +658,6 @@ function App() {
       timeframe: nextTimeframe,
       risk: nextRisk,
       selected_strategy: nextStrategy,
-      strategy_only_mode: true,
       result_snapshot: overrideResult,
       optimization: overrideResult?.optimization || result?.optimization || null,
       source: "manual_strategy_override",
@@ -690,7 +675,6 @@ function App() {
       : result;
 
     setStrategyControlMode("auto");
-    setStrategyOnlyMode(false);
     setManualStrategy("");
     setOptimizerOverrideKey("");
     setSetupSource(hasOptimizerPick ? "auto_optimization" : "manual_selection");
@@ -711,7 +695,6 @@ function App() {
       timeframe: optimizerPick?.timeframe || timeframe,
       risk: optimizerPick?.risk || risk,
       selected_strategy: hasOptimizerPick ? optimizerPick?.selected_strategy : null,
-      strategy_only_mode: false,
       result_snapshot: hasOptimizerPick ? optimizerResult : null,
       optimization: optimizerResult?.optimization || result?.optimization || null,
       source: hasOptimizerPick ? "auto_optimization" : "manual_selection",
@@ -733,27 +716,6 @@ function App() {
     }
 
     return "AUTO-OPTIMIZER PICK";
-  }
-
-  function handleStrategyOnlyModeChange(enabled) {
-    if (!requireOperatorMode("CHANGE STRATEGY ONLY MODE")) return;
-    if (!requireAgentStopped("CHANGE STRATEGY ONLY MODE")) return;
-
-    const selectedStrategy = manualOverrideStrategy || manualStrategy || result?.selected_strategy || "";
-    const hasManualStrategy = Boolean(selectedStrategy && !isAutoStrategyLabel(selectedStrategy));
-
-    if (enabled && !hasManualStrategy) {
-      alert("SELECT A MANUAL STRATEGY BEFORE ENABLING STRATEGY ONLY MODE.");
-      return;
-    }
-
-    setStrategyOnlyMode(enabled);
-
-    saveAgentSetupToBackend({
-      selected_strategy: hasManualStrategy ? selectedStrategy : null,
-      strategy_only_mode: enabled,
-      source: enabled ? "manual_strategy_override" : setupSource || "manual_selection",
-    });
   }
 
   function renderManualOverridePanel() {
@@ -780,20 +742,6 @@ function App() {
         <p className="manual-override-help">
           Auto Optimize recommends. Manual Override decides. Run Agent follows the active source below.
         </p>
-
-        <label className={`strategy-only-toggle ${strategyOnlyMode ? "active" : ""}`}>
-          <input
-            type="checkbox"
-            checked={strategyOnlyMode}
-            disabled={isAgentSetupLocked() || strategyControlMode !== "manual"}
-            onChange={(e) => handleStrategyOnlyModeChange(e.target.checked)}
-          />
-          <span className="strategy-only-switch" aria-hidden="true"><span /></span>
-          <span className="strategy-only-copy">
-            <strong>RUN SELECTED STRATEGY ONLY</strong>
-            <small>Ignore sentiment, Fear &amp; Greed, CMC bias, opportunity ranking and automatic strategy selection. Safety limits remain active.</small>
-          </span>
-        </label>
 
         <div className="manual-override-grid">
           <div>
@@ -858,8 +806,7 @@ function App() {
         </div>
 
         <div className="manual-override-status">
-          ACTIVE SOURCE........ {getStrategyControlStatusLabel()}<br />
-          STRATEGY ONLY........ {getCurrentStrategyOnlyMode() ? "ON — SELECTED STRATEGY CONTROLS ENTRIES" : "OFF — FULL AGENT PIPELINE"}
+          ACTIVE SOURCE........ {getStrategyControlStatusLabel()}
         </div>
 
         <div className="manual-override-actions">
@@ -1127,211 +1074,6 @@ function App() {
     return "DECISION ONLY";
   }
 
-  function getTradeRecordStrategyOnlyMode(record) {
-    const value =
-      record?.strategy_only_mode ??
-      record?.active_config?.strategy_only_mode ??
-      record?.saved_agent_setup?.strategy_only_mode;
-
-    return value === true;
-  }
-
-  function getCurrentStrategyOnlyMode() {
-    if (!isAgentRunning()) return Boolean(strategyOnlyMode);
-
-    const backendValue =
-      agentResult?.strategy_only_mode ??
-      autonomousStatus?.last_result?.strategy_only_mode ??
-      autonomousStatus?.active_config?.strategy_only_mode ??
-      autonomousStatus?.saved_agent_setup?.strategy_only_mode;
-
-    return backendValue === undefined || backendValue === null
-      ? Boolean(strategyOnlyMode)
-      : Boolean(backendValue);
-  }
-
-  function getTradeRecordExecutionModeLabel(record) {
-    const mode = String(
-      record?.execution_mode ||
-      record?.active_config?.execution_mode ||
-      record?.saved_agent_setup?.execution_mode ||
-      (record?.live_execution === true ? "live_trading" : "decision_simulation")
-    ).toLowerCase();
-
-    if (mode === "live_trading") return "LIVE TRADING";
-    if (mode === "paper_trading") return "PAPER TRADING";
-    return "DECISION SIMULATION";
-  }
-
-  function getTradeRecordCurrentSignal(record) {
-    return (
-      record?.backtest?.current_signal ||
-      record?.decision_trace?.raw_signal ||
-      record?.raw_signal ||
-      {}
-    );
-  }
-
-  function getTradeRecordStrategyName(record) {
-    return (
-      record?.selected_strategy ||
-      record?.active_strategy ||
-      record?.strategy ||
-      record?.trade_plan?.selected_strategy ||
-      record?.trade_plan?.strategy ||
-      "N/A"
-    );
-  }
-
-  function getTradeRecordDecisionReason(record) {
-    const signal = getTradeRecordCurrentSignal(record);
-    return (
-      record?.reason ||
-      signal?.message ||
-      signal?.action ||
-      record?.execution_result?.safety_message ||
-      record?.execution_result?.message ||
-      "No strategy reason was returned."
-    );
-  }
-
-  function getTradeRecordContextReasons(record) {
-    const reasons = Array.isArray(record?.why) ? record.why : [];
-    return reasons.filter((reason) =>
-      /CMC market bias|Fear & Greed|Altcoin rotation/i.test(String(reason || ""))
-    );
-  }
-
-  function renderTradeDecisionDetails(trade, isRealTrade) {
-    const color = isRealTrade ? "#9cff8f" : "#808080";
-    const strategyOnly = getTradeRecordStrategyOnlyMode(trade);
-    const executionModeLabel = getTradeRecordExecutionModeLabel(trade);
-    const currentSignal = getTradeRecordCurrentSignal(trade);
-    const strategyName = getTradeRecordStrategyName(trade);
-    const isTdi = String(strategyName).toUpperCase().includes("TDI");
-    const tdi = currentSignal?.tdi || {};
-    const contextReasons = getTradeRecordContextReasons(trade);
-    const decisionReason = getTradeRecordDecisionReason(trade);
-
-    return (
-      <>
-        <p style={{ color }}>STRATEGY-ONLY OVERRIDE: {strategyOnly ? "ON" : "OFF"}</p>
-        <p style={{ color }}>EXECUTION MODE: {executionModeLabel}</p>
-
-        {strategyOnly ? (
-          <>
-            <p style={{ color }}>DECISION BASIS: SELECTED STRATEGY SIGNAL ONLY</p>
-            <p style={{ color }}>{isTdi ? "TDI SIGNAL" : "STRATEGY SIGNAL"}: {String(currentSignal?.status || trade?.decision || "N/A").toUpperCase()}</p>
-            {isTdi && (
-              <>
-                <p style={{ color }}>WHITE BUY: {tdi?.white_buy === true ? "TRUE" : "FALSE"}</p>
-                <p style={{ color }}>WHITE SELL: {tdi?.white_sell === true ? "TRUE" : "FALSE"}</p>
-              </>
-            )}
-            <p style={{ color }}>{String(trade?.decision || "").toUpperCase() === "HOLD" ? "HOLD REASON" : "DECISION REASON"}: {decisionReason}</p>
-            {trade?.confidence_score !== undefined && (
-              <p style={{ color }}>CONTEXT SCORE: {trade.confidence_score} / 100 — NOT A TRADE GATE</p>
-            )}
-            {contextReasons.length > 0 && (
-              <div style={{ color, marginTop: "8px" }}>
-                <p>MARKET CONTEXT — DISPLAY ONLY / NOT A TRADE GATE:</p>
-                {contextReasons.map((reason, reasonIndex) => (
-                  <p key={reasonIndex}>- {reason}</p>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            {trade?.confidence_score !== undefined && (
-              <p style={{ color }}>TRADE CONFIDENCE: {trade.confidence_score} / 100</p>
-            )}
-            {trade?.why?.length > 0 && (
-              <div style={{ color, marginTop: "8px" }}>
-                <p>WHY:</p>
-                {trade.why.slice(0, 5).map((reason, reasonIndex) => (
-                  <p key={reasonIndex}>- {reason}</p>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {trade?.risk_control?.current_drawdown_pct !== undefined && (
-          <p style={{ color }}>DRAWDOWN: {trade.risk_control.current_drawdown_pct}% / LIMIT {trade.risk_control.max_drawdown_limit_pct}%</p>
-        )}
-      </>
-    );
-  }
-
-  function renderAgentConfidenceContent() {
-    if (agentResult?.confidence_score === undefined) return null;
-
-    const strategyOnly = getCurrentStrategyOnlyMode();
-    const currentSignal = getTradeRecordCurrentSignal(agentResult);
-    const strategyName = getTradeRecordStrategyName(agentResult);
-    const isTdi = String(strategyName).toUpperCase().includes("TDI");
-    const tdi = currentSignal?.tdi || {};
-    const reason = getTradeRecordDecisionReason(agentResult);
-
-    if (strategyOnly) {
-      return (
-        <>
-          <p><strong>STRATEGY-ONLY DECISION STATUS</strong></p>
-          <p>ACTIVE STRATEGY...... {strategyName}</p>
-          <p>ACTIVE TIMEFRAME..... {getActiveTimeframeLabel()}</p>
-          <p>STRATEGY ONLY........ ON</p>
-          <p>EXECUTION MODE....... {getTradeRecordExecutionModeLabel(agentResult)}</p>
-          <p>DECISION BASIS....... SELECTED STRATEGY SIGNAL ONLY</p>
-          <p>{isTdi ? "TDI SIGNAL............" : "STRATEGY SIGNAL......."} {String(currentSignal?.status || agentResult?.decision || "N/A").toUpperCase()}</p>
-          {isTdi && (
-            <>
-              <p>WHITE BUY............ {tdi?.white_buy === true ? "TRUE" : "FALSE"}</p>
-              <p>WHITE SELL........... {tdi?.white_sell === true ? "TRUE" : "FALSE"}</p>
-            </>
-          )}
-          <p>{String(agentResult?.decision || "").toUpperCase() === "HOLD" ? "HOLD REASON.........." : "DECISION REASON......"} {reason}</p>
-          <br />
-          <p><strong>MARKET CONTEXT — DISPLAY ONLY</strong></p>
-          <p>CONTEXT SCORE......... {agentResult.confidence_score} / 100 — NOT A TRADE GATE</p>
-          <p>MARKET TREND.......... {agentResult.signal_breakdown?.cmc_bias ?? "N/A"} / 30</p>
-          <p>FEAR &amp; GREED.......... {agentResult.signal_breakdown?.fear_greed ?? "N/A"} / 20</p>
-          <p>ALTCOIN ROTATION...... {agentResult.signal_breakdown?.altcoin_season ?? "N/A"} / 10</p>
-          <p>STRATEGY QUALITY...... {getDetailedStrategyQualityLabel()}</p>
-          <p>RISK CONDITIONS....... {getDetailedRiskConditionsLabel()}</p>
-          <p>NOTE.................. MARKET CONTEXT DOES NOT BLOCK OR AUTHORIZE THE SELECTED STRATEGY. SAFETY LIMITS REMAIN ACTIVE.</p>
-        </>
-      );
-    }
-
-    return (
-      <>
-        <p><strong>{getTradePlan()?.to_token === "BNB" || getTradePlan()?.from_token === "BNB" ? "BNB EXECUTION CONFIDENCE" : `${coin} TRADE CONFIDENCE`}</strong></p>
-        <p>ACTIVE TIMEFRAME...... {getActiveTimeframeLabel()}</p>
-        <p>OVERALL CONFIDENCE.... {agentResult.confidence_score} / 100</p>
-        <br />
-        <p><strong>CONFIDENCE BREAKDOWN</strong></p>
-        <p>MARKET TREND.......... {agentResult.signal_breakdown?.cmc_bias ?? "N/A"} / 30</p>
-        <p>FEAR &amp; GREED.......... {agentResult.signal_breakdown?.fear_greed ?? "N/A"} / 20</p>
-        <p>ALTCOIN ROTATION...... {agentResult.signal_breakdown?.altcoin_season ?? "N/A"} / 10</p>
-        <p>STRATEGY QUALITY...... {getDetailedStrategyQualityLabel()}</p>
-        <p>RISK CONDITIONS....... {getDetailedRiskConditionsLabel()}</p>
-        <br />
-        <p>
-          INTERPRETATION.......{" "}
-          {agentResult.confidence_score < 60
-            ? "WAIT / HOLD"
-            : agentResult.confidence_score < 75
-            ? "WEAK TRADE"
-            : agentResult.confidence_score < 90
-            ? "STRONG TRADE"
-            : "HIGH CONVICTION"}
-        </p>
-        <p>SCALE................ 0 = NO CONFIDENCE / 100 = MAX CONFIDENCE</p>
-      </>
-    );
-  }
-
   function calculateRealizedPnlForTrade(targetTrade) {
     const positions = {};
 
@@ -1547,31 +1289,33 @@ function App() {
     return formatMoney(walletBaseline.total_value_usd);
   }
 
-  function renderStartWalletSnapshot() {
+  function renderStartWalletSnapshotDetails() {
     const assets = Array.isArray(walletBaseline?.assets) ? walletBaseline.assets : [];
 
-    if (!walletBaseline) {
-      return <p>START WALLET......... NOT CAPTURED YET — RUN AGENT</p>;
-    }
-
-    if (!assets.length) {
-      return <p>START WALLET......... SNAPSHOT HAS NO ASSET ROWS</p>;
-    }
+    if (!walletBaseline) return null;
 
     return (
-      <>
-        <br />
-        <p><strong>START WALLET SNAPSHOT</strong></p>
-        {assets.map((asset, index) => (
-          <div key={`${asset.symbol || "ASSET"}-${index}`} className="baseline-asset-block">
-            <p>{String(asset.symbol || "UNKNOWN").toUpperCase()} START AMOUNT..... {formatAssetBalance(asset.balance_numeric ?? asset.balance)} {String(asset.symbol || "").toUpperCase()}</p>
-            <p>{String(asset.symbol || "UNKNOWN").toUpperCase()} START PRICE...... {formatPrice(asset.price_usd)}</p>
-            <p>{String(asset.symbol || "UNKNOWN").toUpperCase()} START VALUE...... {formatMoney(asset.usd_value_usd)}</p>
-          </div>
-        ))}
-        <p>SNAPSHOT TOTAL....... {formatMoney(walletBaseline.total_value_usd)}</p>
-        <p>SNAPSHOT TIME........ {formatPortfolioBaselineDateOnly(walletBaseline.captured_at)}</p>
-      </>
+      <details className="retro-sub-window">
+        <summary>START WALLET SNAPSHOT</summary>
+        <div className="metrics">
+          <p>BASELINE DATE........ {formatPortfolioBaselineDateOnly(walletBaseline.captured_at)}</p>
+          <p>START TOTAL.......... {formatMoney(walletBaseline.total_value_usd)}</p>
+          <br />
+          {assets.length > 0 ? (
+            assets.map((asset, index) => (
+              <div key={`${asset.symbol || "ASSET"}-${index}`}>
+                <p>ASSET............... {String(asset.symbol || "UNKNOWN").toUpperCase()}</p>
+                <p>START AMOUNT........ {formatAssetBalance(asset.balance_numeric ?? asset.balance)} {String(asset.symbol || "").toUpperCase()}</p>
+                <p>START PRICE......... {formatPrice(asset.price_usd)}</p>
+                <p>START VALUE......... {formatMoney(asset.usd_value_usd)}</p>
+                <br />
+              </div>
+            ))
+          ) : (
+            <p>NO START-ASSET ROWS WERE RETURNED</p>
+          )}
+        </div>
+      </details>
     );
   }
 
@@ -1878,10 +1622,6 @@ function App() {
       setManualStrategy(setup.selected_strategy);
     }
 
-    if (setup.strategy_only_mode !== undefined && setup.strategy_only_mode !== null) {
-      setStrategyOnlyMode(Boolean(setup.strategy_only_mode));
-    }
-
     if (setup.source) {
       setSetupSource(setup.source);
 
@@ -1917,7 +1657,6 @@ function App() {
       trade_size: patch.trade_size !== undefined ? patch.trade_size : tradeSize,
       interval_minutes: patch.interval_minutes !== undefined ? patch.interval_minutes : autonomousInterval,
       selected_strategy: patch.selected_strategy !== undefined ? patch.selected_strategy : manualStrategy || snapshot?.selected_strategy || null,
-      strategy_only_mode: patch.strategy_only_mode !== undefined ? Boolean(patch.strategy_only_mode) : strategyOnlyMode,
       result_snapshot: snapshot,
       optimization: optimizationSnapshot,
       source: patch.source || "manual_selection",
@@ -2023,7 +1762,6 @@ async function startAutonomousMode() {
         execution_mode: selectedExecutionMode,
         trade_size: tradeSize,
         selected_strategy: selectedStrategyForPayload,
-        strategy_only_mode: strategyOnlyMode,
         interval_minutes: Number(autonomousInterval),
         result_snapshot: result || null,
         optimization: result?.optimization || null,
@@ -2143,8 +1881,6 @@ useEffect(() => {
   document.title = "I KNOW QUANT FU";
 
   if (typeof window !== "undefined") {
-    // Old builds stored START VALUE in browser localStorage. Those values are
-    // deliberately ignored now because the backend snapshot is authoritative.
     window.localStorage.removeItem("ikqf_starting_portfolio_value");
     window.localStorage.removeItem("ikqf_starting_portfolio_timestamp");
   }
@@ -2177,11 +1913,10 @@ useEffect(() => {
   window.localStorage.setItem("ikqf_autonomous_interval", String(autonomousInterval));
   window.localStorage.setItem("ikqf_manual_strategy", manualStrategy || "");
   window.localStorage.setItem("ikqf_strategy_control_mode", strategyControlMode || "auto");
-  window.localStorage.setItem("ikqf_strategy_only_mode", String(strategyOnlyMode));
   window.localStorage.setItem("ikqf_manual_override_strategy", manualOverrideStrategy || "");
   window.localStorage.setItem("ikqf_manual_override_timeframe", manualOverrideTimeframe || "");
   window.localStorage.setItem("ikqf_manual_override_risk", manualOverrideRisk || "");
-}, [coin, timeframe, risk, tradeSize, initialCapital, executionMode, autonomousInterval, manualStrategy, strategyOnlyMode, strategyControlMode, manualOverrideStrategy, manualOverrideTimeframe, manualOverrideRisk]);
+}, [coin, timeframe, risk, tradeSize, initialCapital, executionMode, autonomousInterval, manualStrategy, strategyControlMode, manualOverrideStrategy, manualOverrideTimeframe, manualOverrideRisk]);
 
 useEffect(() => {
   if (executionMode) {
@@ -2982,7 +2717,6 @@ Best eligible risk-adjusted score among all tested combinations.
         throw new Error(data.error || "Strategy generation failed.");
       }
 
-      setStrategyOnlyMode(false);
       setResult(data);
       setAutoOptimized(false);
       setSetupSource("generated_strategy");
@@ -2991,7 +2725,6 @@ Best eligible risk-adjusted score among all tested combinations.
         timeframe: data.timeframe || timeframe,
         risk: data.risk || risk,
         selected_strategy: data.selected_strategy || null,
-        strategy_only_mode: false,
         result_snapshot: data,
         optimization: null,
         source: "generated_strategy",
@@ -3010,8 +2743,6 @@ Best eligible risk-adjusted score among all tested combinations.
     if (!requireAgentStopped("AUTO-OPTIMIZE SETUP")) return;
 
     pulseButton("optimize");
-    setStrategyControlMode("auto");
-    setStrategyOnlyMode(false);
     setAutoOptimized(false);
     setOptimizerOverrideKey("");
     setSetupSource("optimizer_running");
@@ -3103,7 +2834,6 @@ Best eligible risk-adjusted score among all tested combinations.
         timeframe: best.timeframe,
         risk: best.risk,
         selected_strategy: best.selected_strategy,
-        strategy_only_mode: false,
         result_snapshot: optimizedResult,
         optimization: optimizedResult.optimization,
         source: "auto_optimization",
@@ -3126,17 +2856,15 @@ async function runAgentCycle() {
   setLoadingMode("agent");
 
   try {
-    // Critical ordering rule: /autonomous/start captures and persists the
-    // immutable live-wallet baseline BEFORE the backend loop can trade.
-    // Never call /agent-cycle first when the agent is stopped.
+    // CRITICAL: when stopped, /autonomous/start captures and persists the
+    // immutable wallet baseline before the backend loop can trade.
     if (!autonomousMode) {
       await startAutonomousMode();
       await loadTradeHistory();
       return;
     }
 
-    // The agent is already running and the immutable baseline already exists.
-    // Refresh status instead of forcing an extra duplicate trading cycle.
+    // Already running: refresh status; do not force an extra duplicate cycle.
     await loadAutonomousStatus();
     await loadPortfolio();
     await loadTradeHistory();
@@ -3257,7 +2985,7 @@ async function resetPnlBaseline() {
 
   const confirmed = window.confirm(
     "RESET THE START WALLET BASELINE TO THE CURRENT LIVE WALLET?\n\n" +
-    "This intentionally replaces the historical start value, timestamp, balances, and start prices."
+    "This replaces the historical start value, timestamp, balances, and start prices."
   );
 
   if (!confirmed) return;
@@ -3290,7 +3018,6 @@ async function loadWalletBaseline() {
   try {
     const response = await fetch(`${API_BASE}/wallet-baseline`);
     const data = await response.json();
-
     setWalletBaseline(data?.wallet_baseline || null);
   } catch (err) {
     console.error("WALLET BASELINE LOAD FAILED:", err);
@@ -3629,8 +3356,6 @@ async function loadTradeHistory() {
               <div className="simple-metric-row"><span>CHECKS</span><strong>EVERY {autonomousInterval} MINUTES</strong></div>
               <div className="simple-metric-row"><span>TRIGGER</span><strong>CLOSED {getActiveTimeframeLabel()} CANDLE + VALID SIGNAL</strong></div>
               <div className="simple-metric-row"><span>RISK</span><strong>{getRiskProfileLabel(risk)}</strong></div>
-              <div className="simple-metric-row"><span>START VALUE</span><strong>{getPortfolioStartValueOnlyLabel()}</strong></div>
-              <div className="simple-metric-row"><span>CURRENT VALUE</span><strong>{formatMoney(portfolio?.totalUsdValue || 0)}</strong></div>
 
               <div className="simple-action-grid">
                 <button onClick={optimizeStrategy} disabled={isAgentSetupLocked()} title={getAgentSetupLockTitle("AUTO-OPTIMIZE SETUP")} style={getButtonStyle("optimize")}>
@@ -3895,7 +3620,6 @@ async function loadTradeHistory() {
                 <p><strong>WHAT AM I DOING NOW?</strong></p>
                 <p>AGENT STATUS........ {getAgentRuntimeStatusLabel()}</p>
                 <p>MODE................ {getExecutionModeLabel()}</p>
-                <p>STRATEGY ONLY....... {getCurrentStrategyOnlyMode() ? "ON — SELECTED STRATEGY SIGNAL ONLY" : "OFF — FULL AGENT PIPELINE"}</p>
                 <p>ACTIVE TIMEFRAME.... {getActiveTimeframeLabel()}</p>
                 <p>LAST DECISION....... {getExecutionAction()}</p>
                 <p>ACTIVE STRATEGY..... {getActiveStrategyLabel()}</p>
@@ -3986,7 +3710,7 @@ async function loadTradeHistory() {
                     ? "N/A"
                     : `${Number(portfolio.tradingPnlUsd) >= 0 ? "+" : "-"}$${Math.abs(Number(portfolio.tradingPnlUsd)).toFixed(2)}`}
                 </p>
-                {renderStartWalletSnapshot()}
+                {renderStartWalletSnapshotDetails()}
                 <button onClick={resetPnlBaseline} disabled={isOperatorControlLocked()} className="copy-btn" style={{ marginTop: "12px", ...getButtonStyle("resetPnl") }}>
                   {"> RESET START WALLET BASELINE <"}
                 </button>
@@ -4271,7 +3995,6 @@ async function loadTradeHistory() {
                   <div className="metrics strategy-library-box execution-status-panel">
                     <p><strong>EXECUTION STATUS</strong></p>
                     <p>MODE................ {getExecutionModeLabel()}</p>
-                    <p>STRATEGY ONLY....... {getCurrentStrategyOnlyMode() ? "ON — SELECTED STRATEGY SIGNAL ONLY" : "OFF — FULL AGENT PIPELINE"}</p>
                     <p>ACTIVE STRATEGY.... {getActiveStrategyLabel()}</p>
                     <p>ACTIVE TIMEFRAME... {getActiveTimeframeLabel()}</p>
                     <p>TRADE EXECUTED...... {executionStatus.executed}</p>
@@ -4356,7 +4079,16 @@ async function loadTradeHistory() {
                             STRATEGY: {trade.selected_strategy || trade.active_strategy || trade.strategy || trade.trade_plan?.selected_strategy || trade.trade_plan?.strategy || "N/A"}
                           </p>
                           <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TIMEFRAME: {trade.timeframe || trade.trade_plan?.timeframe || trade.active_config?.timeframe || getActiveTimeframeLabel()}</p>
-                          {renderTradeDecisionDetails(trade, isRealTrade)}
+                          {trade.confidence_score !== undefined && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TRADE CONFIDENCE: {trade.confidence_score} / 100</p>}
+                          {trade.risk_control?.current_drawdown_pct !== undefined && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>DRAWDOWN: {trade.risk_control.current_drawdown_pct}% / LIMIT {trade.risk_control.max_drawdown_limit_pct}%</p>}
+                          {trade.why?.length > 0 && (
+                            <div style={{ color: isRealTrade ? "#9cff8f" : "#808080", marginTop: "8px" }}>
+                              <p>WHY:</p>
+                              {trade.why.slice(0, 5).map((reason, reasonIndex) => (
+                                <p key={reasonIndex}>- {reason}</p>
+                              ))}
+                            </div>
+                          )}
                           {trade.decision && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>DECISION: {trade.decision}</p>}
                           {(trade.coin || executionRoute) && (
                             <>
@@ -4409,7 +4141,28 @@ async function loadTradeHistory() {
               <details className="retro-window" open>
                 <summary>TRADE CONFIDENCE / WHY</summary>
                 <div className="metrics strategy-library-box">
-                  {renderAgentConfidenceContent()}
+                  <p><strong>{getTradePlan()?.to_token === "BNB" || getTradePlan()?.from_token === "BNB" ? "BNB EXECUTION CONFIDENCE" : `${coin} TRADE CONFIDENCE`}</strong></p>
+                  <p>ACTIVE TIMEFRAME...... {getActiveTimeframeLabel()}</p>
+                  <p>OVERALL CONFIDENCE.... {agentResult.confidence_score} / 100</p>
+                  <br />
+                  <p><strong>CONFIDENCE BREAKDOWN</strong></p>
+                  <p>MARKET TREND.......... {agentResult.signal_breakdown?.cmc_bias ?? "N/A"} / 30</p>
+                  <p>FEAR & GREED.......... {agentResult.signal_breakdown?.fear_greed ?? "N/A"} / 20</p>
+                  <p>ALTCOIN ROTATION...... {agentResult.signal_breakdown?.altcoin_season ?? "N/A"} / 10</p>
+                  <p>STRATEGY QUALITY...... {getDetailedStrategyQualityLabel()}</p>
+                  <p>RISK CONDITIONS....... {getDetailedRiskConditionsLabel()}</p>
+                  <br />
+                  <p>
+                    INTERPRETATION.......{" "}
+                    {agentResult.confidence_score < 60
+                      ? "WAIT / HOLD"
+                      : agentResult.confidence_score < 75
+                      ? "WEAK TRADE"
+                      : agentResult.confidence_score < 90
+                      ? "STRONG TRADE"
+                      : "HIGH CONVICTION"}
+                  </p>
+                  <p>SCALE................ 0 = NO CONFIDENCE / 100 = MAX CONFIDENCE</p>
                 </div>
 
               </details>
@@ -5106,7 +4859,6 @@ async function loadTradeHistory() {
     <div className="metrics strategy-library-box execution-status-panel" style={{ marginTop: "24px" }}>
       <p><strong>EXECUTION STATUS</strong></p>
       <p>MODE................ {getExecutionModeLabel()}</p>
-      <p>STRATEGY ONLY....... {getCurrentStrategyOnlyMode() ? "ON — SELECTED STRATEGY SIGNAL ONLY" : "OFF — FULL AGENT PIPELINE"}</p>
       <p>ACTIVE STRATEGY.... {getActiveStrategyLabel()}</p>
       <p>TRADE EXECUTED...... {executionStatus.executed}</p>
       <p>STATUS.............. {executionStatus.status}</p>
@@ -5187,7 +4939,7 @@ async function loadTradeHistory() {
   <p>PORTFOLIO CHANGE..... {portfolio?.tradingPnlUsd === null || portfolio?.tradingPnlUsd === undefined
     ? "N/A"
     : `${Number(portfolio.tradingPnlUsd) >= 0 ? "+" : "-"}$${Math.abs(Number(portfolio.tradingPnlUsd)).toFixed(2)}`}</p>
-  {renderStartWalletSnapshot()}
+  {renderStartWalletSnapshotDetails()}
 
   <p>AGENT ADDRESS........ {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
   <p>ACTIVE TIMEFRAME... {getActiveTimeframeLabel()}</p>
@@ -5214,7 +4966,30 @@ async function loadTradeHistory() {
 
 {agentResult?.confidence_score !== undefined && (
   <div className="metrics strategy-library-box" style={{ marginTop: "24px" }}>
-    {renderAgentConfidenceContent()}
+    <p><strong>{getTradePlan()?.to_token === "BNB" || getTradePlan()?.from_token === "BNB" ? "BNB EXECUTION CONFIDENCE" : `${coin} TRADE CONFIDENCE`}</strong></p>
+    <p>OVERALL CONFIDENCE.... {agentResult.confidence_score} / 100</p>
+    <br />
+
+    <p><strong>CONFIDENCE BREAKDOWN</strong></p>
+    <p>MARKET TREND.......... {agentResult.signal_breakdown?.cmc_bias ?? "N/A"} / 30</p>
+    <p>FEAR & GREED.......... {agentResult.signal_breakdown?.fear_greed ?? "N/A"} / 20</p>
+    <p>ALTCOIN ROTATION...... {agentResult.signal_breakdown?.altcoin_season ?? "N/A"} / 10</p>
+    <p>STRATEGY QUALITY...... {getDetailedStrategyQualityLabel()}</p>
+    <p>RISK CONDITIONS....... {getDetailedRiskConditionsLabel()}</p>
+
+    <br />
+
+    <p>
+      INTERPRETATION.......{" "}
+      {agentResult.confidence_score < 60
+        ? "WAIT / HOLD"
+        : agentResult.confidence_score < 75
+        ? "WEAK TRADE"
+        : agentResult.confidence_score < 90
+        ? "STRONG TRADE"
+        : "HIGH CONVICTION"}
+    </p>
+    <p>SCALE................ 0 = NO CONFIDENCE / 100 = MAX CONFIDENCE</p>
   </div>
 )}
 
@@ -5654,7 +5429,27 @@ const isRealTrade = tradeTypeLabel === "REAL TRADE / EXECUTION";
   EVENT: {getTradeLogEventLabel(trade)}
 </p>
 
-{renderTradeDecisionDetails(trade, isRealTrade)}
+{trade.confidence_score !== undefined && (
+  <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>
+    TRADE CONFIDENCE: {trade.confidence_score} / 100
+  </p>
+)}
+
+{trade.risk_control?.current_drawdown_pct !== undefined && (
+  <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>
+    DRAWDOWN: {trade.risk_control.current_drawdown_pct}% / LIMIT {trade.risk_control.max_drawdown_limit_pct}%
+  </p>
+)}
+
+
+{trade.why?.length > 0 && (
+  <div style={{ color: isRealTrade ? "#9cff8f" : "#808080", marginTop: "8px" }}>
+    <p>WHY:</p>
+    {trade.why.slice(0, 5).map((reason, reasonIndex) => (
+      <p key={reasonIndex}>- {reason}</p>
+    ))}
+  </div>
+)}
        
 
 {trade.decision && (
