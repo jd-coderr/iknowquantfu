@@ -2,8 +2,6 @@
 
 https://www.iknowquantfu.com
 
-https://www.youtube.com/watch?v=LBmOMBLQiYQ
-
 ## Autonomous Crypto Trading Agent for the BNB Hack: AI Trading Agent Edition
 
 **I Know Quant Fu** is an autonomous crypto trading agent built for the **BNB Hack: AI Trading Agent Edition — CoinMarketCap × Trust Wallet** competition.
