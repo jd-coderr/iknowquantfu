@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from twak_executor import run_twak_swap, run_twak_portfolio
 from pathlib import Path
 from pydantic import BaseModel
-from backtest import run_backtest
+from backtest import run_backtest, timeframe_to_binance, timeframe_to_minutes
 from cmc_data import get_cmc_signal
 from twak_config import get_twak_status, get_configured_agent_address
 from trade_safety import validate_trade_request, mark_live_trade_executed
@@ -102,16 +102,14 @@ def operator_unlock(_operator_ok: bool = Depends(require_operator_key)):
     }
 
 BASE_DIR = Path(__file__).resolve().parent
-STATE_DIR = Path(os.getenv("IKQF_STATE_DIR", str(BASE_DIR))).expanduser()
-STATE_DIR.mkdir(parents=True, exist_ok=True)
 STRATEGIES_DIR = BASE_DIR / "strategies"
-WALLET_BASELINE_STATE_FILE = STATE_DIR / "wallet_baseline_state.json"
 
 STRATEGY_FILES = [
     "vwap_reversion.json",
     "smc_sequence.json",
     "stochastic_quad.json",
     "tdi_white_signal.json",
+    "ikqf_tdi_bottom_to_top_v1.json",
     "fvg_channel.json",
     "ichimoku_macd_ema_confluence.json",
 ]
@@ -150,9 +148,8 @@ AUTONOMOUS_STATE = {
 AUTONOMOUS_THREAD = None
 AUTONOMOUS_CONFIG = None
 
-AGENT_SETUP_STATE_FILE = STATE_DIR / "agent_setup_state.json"
+AGENT_SETUP_STATE_FILE = BASE_DIR / "agent_setup_state.json"
 SAVED_AGENT_SETUP = None
-WALLET_BASELINE_CACHE = None
 
 
 def get_default_agent_setup():
@@ -164,7 +161,7 @@ def get_default_agent_setup():
         "live_execution": False,
         "execution_mode": "decision_simulation",
         "trade_size": 0.001,
-        "interval_minutes": 5,
+        "interval_minutes": 1,
         "selected_strategy": None,
         "strategy_only_mode": False,
         "result_snapshot": None,
@@ -297,7 +294,9 @@ DAILY_QUALIFICATION_STATE = {
 PAPER_PORTFOLIO = {
     "starting_balance_usdt": 1000.0,
     "cash_usdt": 1000.0,
-    "bnb_balance": 0.0,
+    "bnb_balance": 0.0,  # backward-compatible mirror of asset_balances["BNB"]
+    "asset_balances": {},
+    "last_prices_usd": {},
     "realized_pnl_usdt": 0.0,
     "unrealized_pnl_usdt": 0.0,
     "peak_value_usdt": 1000.0,
@@ -340,7 +339,7 @@ class AgentCycleRequest(BaseModel):
     live_execution: bool = False
     execution_mode: str = "decision_simulation"
     trade_size: float = 0.001
-    interval_minutes: int = 5
+    interval_minutes: int = 1
     selected_strategy: str | None = None
     # None means “use the saved backend setting” for compatibility with older frontends.
     strategy_only_mode: bool | None = None
@@ -356,7 +355,7 @@ class AutonomousRequest(BaseModel):
     selected_strategy: str | None = None
     # None means “use the saved backend setting” for compatibility with older frontends.
     strategy_only_mode: bool | None = None
-    interval_minutes: int = 5
+    interval_minutes: int = 1
     result_snapshot: dict | None = None
     optimization: dict | None = None
     setup_source: str | None = None
@@ -383,13 +382,27 @@ def home():
     return {"status": "running"}
 
 
+def resolve_strategy_file(filename: str):
+    """Resolve strategy JSON from /strategies first, then project root.
+
+    The root fallback makes a deployable strategy file usable even when it has
+    not yet been moved into the strategies subdirectory.
+    """
+    candidates = [STRATEGIES_DIR / filename, BASE_DIR / filename]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
 def load_strategy(filename: str):
-    strategy_file = STRATEGIES_DIR / filename
+    strategy_file = resolve_strategy_file(filename)
 
     with open(strategy_file, "r", encoding="utf-8") as file:
         strategy = json.load(file)
 
     strategy["source_file"] = filename
+    strategy["source_path"] = str(strategy_file)
     return strategy
 
 
@@ -397,7 +410,7 @@ def load_available_strategies():
     strategies = []
 
     for filename in STRATEGY_FILES:
-        strategy_file = STRATEGIES_DIR / filename
+        strategy_file = resolve_strategy_file(filename)
 
         if strategy_file.exists():
             strategies.append(load_strategy(filename))
@@ -527,157 +540,30 @@ def safe_float(value, default=0.0):
         return default
 
 
-def load_wallet_baseline_state():
-    """Load the immutable live-wallet baseline captured when the agent first starts."""
-    global WALLET_BASELINE_CACHE
-
-    if WALLET_BASELINE_CACHE is not None:
-        return WALLET_BASELINE_CACHE
-
-    baseline = None
-
-    if WALLET_BASELINE_STATE_FILE.exists():
-        try:
-            loaded = json.loads(WALLET_BASELINE_STATE_FILE.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                baseline = loaded
-        except Exception:
-            baseline = None
-
-    WALLET_BASELINE_CACHE = baseline
-    return WALLET_BASELINE_CACHE
+VALID_EXECUTION_MODES = {"decision_simulation", "paper_trading", "live_trading"}
 
 
-def persist_wallet_baseline_state(baseline):
-    """Persist the baseline atomically so a partial write cannot corrupt it."""
-    global WALLET_BASELINE_CACHE
+def normalize_execution_mode(execution_mode=None, live_execution=False):
+    """Normalize legacy/new execution controls into one unambiguous mode."""
+    if live_execution is True:
+        return "live_trading"
 
-    temp_file = WALLET_BASELINE_STATE_FILE.with_suffix(".tmp")
-    temp_file.write_text(json.dumps(baseline, indent=2, default=str), encoding="utf-8")
-    temp_file.replace(WALLET_BASELINE_STATE_FILE)
-    WALLET_BASELINE_CACHE = baseline
-    return baseline
-
-
-def get_wallet_baseline_snapshot():
-    baseline = load_wallet_baseline_state()
-    if not isinstance(baseline, dict):
-        return None
-    return json.loads(json.dumps(baseline, default=str))
-
-
-def restore_wallet_baseline_into_risk_state():
-    """Keep RISK_STATE tied to the original persisted start value after restarts."""
-    baseline = load_wallet_baseline_state()
-
-    if not isinstance(baseline, dict):
-        return None
-
-    baseline_value = safe_float(baseline.get("total_value_usd"), 0.0)
-
-    if baseline_value >= 0:
-        RISK_STATE["baseline_portfolio_value_usd"] = baseline_value
-        current_peak = RISK_STATE.get("peak_portfolio_value_usd")
-        if current_peak is None:
-            RISK_STATE["peak_portfolio_value_usd"] = baseline_value
-        else:
-            RISK_STATE["peak_portfolio_value_usd"] = max(
-                safe_float(current_peak, baseline_value),
-                baseline_value,
-            )
-
-    return baseline
-
-
-def build_wallet_baseline_snapshot(portfolio_items, agent_address=None, captured_at=None):
-    """Freeze balances, per-token USD prices, token USD values, and total wallet value."""
-    captured_at = captured_at or datetime.now(timezone.utc).isoformat()
-    assets = []
-
-    for item in portfolio_items:
-        if not isinstance(item, dict):
-            continue
-
-        symbol = str(item.get("symbol") or "UNKNOWN").upper()
-        raw_balance = item.get("balance", 0)
-        balance = safe_float(raw_balance, 0.0)
-        usd_value = safe_float(item.get("usdValue", 0), 0.0)
-        price_usd = (usd_value / balance) if balance > 0 else 0.0
-
-        assets.append({
-            "symbol": symbol,
-            "balance": str(raw_balance),
-            "balance_numeric": balance,
-            "price_usd": round(price_usd, 12),
-            "usd_value_usd": round(usd_value, 12),
-            "chain": item.get("chain"),
-            "type": item.get("type"),
-        })
-
-    assets.sort(key=lambda item: (-safe_float(item.get("usd_value_usd"), 0.0), item.get("symbol", "")))
-    total_value = sum(safe_float(item.get("usd_value_usd"), 0.0) for item in assets)
-
-    return {
-        "version": 1,
-        "captured_at": captured_at,
-        "agent_address": agent_address or get_configured_agent_address(),
-        "chain": "bsc",
-        "network": "BNB Smart Chain / BSC",
-        "total_value_usd": round(total_value, 12),
-        "assets": assets,
+    raw = str(execution_mode or "decision_simulation").strip().lower()
+    aliases = {
+        "simulation": "decision_simulation",
+        "decision": "decision_simulation",
+        "paper": "paper_trading",
+        "live": "live_trading",
     }
+    mode = aliases.get(raw, raw)
 
+    if mode not in VALID_EXECUTION_MODES:
+        raise ValueError(
+            f"Unsupported execution mode '{execution_mode}'. "
+            "Use decision_simulation, paper_trading, or live_trading."
+        )
 
-def ensure_wallet_baseline_captured(force=False):
-    """Capture once on first Run Agent; never overwrite unless explicitly forced."""
-    existing = load_wallet_baseline_state()
-
-    if isinstance(existing, dict) and not force:
-        restore_wallet_baseline_into_risk_state()
-        return {
-            "success": True,
-            "created": False,
-            "baseline": get_wallet_baseline_snapshot(),
-            "message": "Existing wallet baseline preserved.",
-        }
-
-    agent_address = get_configured_agent_address()
-    result = run_twak_portfolio(address=agent_address)
-    raw_items = result.get("portfolio") or [] if isinstance(result, dict) else []
-    portfolio_items = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
-
-    if not isinstance(result, dict) or not result.get("success") or not portfolio_items:
-        return {
-            "success": False,
-            "created": False,
-            "baseline": get_wallet_baseline_snapshot(),
-            "message": "Wallet baseline was not changed because the live portfolio could not be read.",
-            "portfolio_result": result,
-        }
-
-    snapshot = build_wallet_baseline_snapshot(
-        portfolio_items=portfolio_items,
-        agent_address=agent_address,
-    )
-
-    try:
-        persist_wallet_baseline_state(snapshot)
-    except Exception as error:
-        return {
-            "success": False,
-            "created": False,
-            "baseline": get_wallet_baseline_snapshot(),
-            "message": f"Wallet baseline could not be persisted: {str(error)}",
-        }
-
-    restore_wallet_baseline_into_risk_state()
-
-    return {
-        "success": True,
-        "created": True,
-        "baseline": get_wallet_baseline_snapshot(),
-        "message": "Wallet baseline captured and persisted.",
-    }
+    return mode
 
 
 def extract_tx_hash_from_text(value):
@@ -743,8 +629,6 @@ def get_token_price_usd(portfolio_items, symbol):
 
 
 def update_risk_state(portfolio_items, portfolio_available=True):
-    restore_wallet_baseline_into_risk_state()
-
     if not portfolio_available or not portfolio_items:
         RISK_STATE["status"] = "PORTFOLIO UNAVAILABLE"
         return dict(RISK_STATE)
@@ -752,14 +636,11 @@ def update_risk_state(portfolio_items, portfolio_available=True):
     portfolio_value = get_portfolio_value_usd_from_items(portfolio_items)
 
     if portfolio_value > 0:
-        # The start value is captured only by /autonomous/start (or an explicit reset).
-        # Agent cycles must never silently replace it with a newer wallet value.
+        if RISK_STATE["baseline_portfolio_value_usd"] is None:
+            RISK_STATE["baseline_portfolio_value_usd"] = portfolio_value
+
         if RISK_STATE["peak_portfolio_value_usd"] is None:
-            RISK_STATE["peak_portfolio_value_usd"] = (
-                RISK_STATE["baseline_portfolio_value_usd"]
-                if RISK_STATE["baseline_portfolio_value_usd"] is not None
-                else portfolio_value
-            )
+            RISK_STATE["peak_portfolio_value_usd"] = portfolio_value
 
         RISK_STATE["peak_portfolio_value_usd"] = max(
             safe_float(RISK_STATE["peak_portfolio_value_usd"]),
@@ -1202,6 +1083,13 @@ def maybe_build_forced_trade_close_plan(request, cmc_signal, live_execution_enab
 
 
 
+def _sync_paper_compatibility_fields():
+    PAPER_PORTFOLIO["bnb_balance"] = safe_float(
+        (PAPER_PORTFOLIO.get("asset_balances") or {}).get("BNB", 0.0),
+        0.0,
+    )
+
+
 def reset_paper_portfolio(starting_balance_usdt=1000.0):
     """Reset only the in-memory paper portfolio; live wallet state is untouched."""
     starting_balance_usdt = max(0.0, safe_float(starting_balance_usdt, 1000.0))
@@ -1209,6 +1097,8 @@ def reset_paper_portfolio(starting_balance_usdt=1000.0):
     PAPER_PORTFOLIO["starting_balance_usdt"] = starting_balance_usdt
     PAPER_PORTFOLIO["cash_usdt"] = starting_balance_usdt
     PAPER_PORTFOLIO["bnb_balance"] = 0.0
+    PAPER_PORTFOLIO["asset_balances"] = {}
+    PAPER_PORTFOLIO["last_prices_usd"] = {}
     PAPER_PORTFOLIO["realized_pnl_usdt"] = 0.0
     PAPER_PORTFOLIO["unrealized_pnl_usdt"] = 0.0
     PAPER_PORTFOLIO["peak_value_usdt"] = starting_balance_usdt
@@ -1218,29 +1108,43 @@ def reset_paper_portfolio(starting_balance_usdt=1000.0):
     return get_paper_portfolio_status()
 
 
-
-def get_paper_portfolio_status(price_usd=None):
+def get_paper_portfolio_status(price_usd=None, symbol=None):
     price_usd = safe_float(price_usd, 0.0)
+    symbol = normalize_trade_token(symbol) if symbol else None
 
-    bnb_value = PAPER_PORTFOLIO["bnb_balance"] * price_usd if price_usd > 0 else 0.0
-    total_value = PAPER_PORTFOLIO["cash_usdt"] + bnb_value
+    if symbol and symbol != "USDT" and price_usd > 0:
+        PAPER_PORTFOLIO.setdefault("last_prices_usd", {})[symbol] = price_usd
 
+    asset_balances = PAPER_PORTFOLIO.setdefault("asset_balances", {})
+    last_prices = PAPER_PORTFOLIO.setdefault("last_prices_usd", {})
+    _sync_paper_compatibility_fields()
+
+    asset_values = {}
+    total_asset_value = 0.0
+    for asset_symbol, balance in asset_balances.items():
+        balance = safe_float(balance, 0.0)
+        asset_price = safe_float(last_prices.get(asset_symbol), 0.0)
+        value = balance * asset_price if asset_price > 0 else 0.0
+        asset_values[asset_symbol] = round(value, 6)
+        total_asset_value += value
+
+    total_value = PAPER_PORTFOLIO["cash_usdt"] + total_asset_value
     unrealized = 0.0
 
-    if price_usd > 0:
-        for position in PAPER_PORTFOLIO["open_positions"]:
-            entry_price = safe_float(position.get("entry_price_usd"), 0.0)
-            amount_bnb = safe_float(position.get("amount_bnb"), 0.0)
+    for position in PAPER_PORTFOLIO["open_positions"]:
+        position_symbol = normalize_trade_token(position.get("symbol") or position.get("to_token"))
+        entry_price = safe_float(position.get("entry_price_usd"), 0.0)
+        amount_asset = safe_float(position.get("amount_asset", position.get("amount_bnb", 0.0)), 0.0)
+        current_price = safe_float(last_prices.get(position_symbol), 0.0)
 
-            if entry_price > 0 and amount_bnb > 0:
-                unrealized += (price_usd - entry_price) * amount_bnb
+        if entry_price > 0 and amount_asset > 0 and current_price > 0:
+            unrealized += (current_price - entry_price) * amount_asset
 
     PAPER_PORTFOLIO["unrealized_pnl_usdt"] = round(unrealized, 6)
     PAPER_PORTFOLIO["peak_value_usdt"] = max(PAPER_PORTFOLIO["peak_value_usdt"], total_value)
 
     total_pnl = total_value - PAPER_PORTFOLIO["starting_balance_usdt"]
     return_pct = 0.0
-
     if PAPER_PORTFOLIO["starting_balance_usdt"] > 0:
         return_pct = (total_pnl / PAPER_PORTFOLIO["starting_balance_usdt"]) * 100
 
@@ -1251,10 +1155,16 @@ def get_paper_portfolio_status(price_usd=None):
             ((PAPER_PORTFOLIO["peak_value_usdt"] - total_value) / PAPER_PORTFOLIO["peak_value_usdt"]) * 100,
         )
 
+    bnb_balance = safe_float(asset_balances.get("BNB", 0.0), 0.0)
+    bnb_value = safe_float(asset_values.get("BNB", 0.0), 0.0)
+
     return {
         "starting_balance_usdt": round(PAPER_PORTFOLIO["starting_balance_usdt"], 6),
         "cash_usdt": round(PAPER_PORTFOLIO["cash_usdt"], 6),
-        "bnb_balance": round(PAPER_PORTFOLIO["bnb_balance"], 8),
+        "asset_balances": {k: round(safe_float(v), 8) for k, v in asset_balances.items() if safe_float(v) > 0},
+        "asset_values_usdt": asset_values,
+        "last_prices_usd": {k: round(safe_float(v), 8) for k, v in last_prices.items()},
+        "bnb_balance": round(bnb_balance, 8),
         "bnb_value_usdt": round(bnb_value, 6),
         "total_value_usdt": round(total_value, 6),
         "realized_pnl_usdt": round(PAPER_PORTFOLIO["realized_pnl_usdt"], 6),
@@ -1268,32 +1178,40 @@ def get_paper_portfolio_status(price_usd=None):
         "open_position_count": len(PAPER_PORTFOLIO["open_positions"]),
         "closed_trade_count": len(PAPER_PORTFOLIO["closed_trades"]),
         "price_usd": price_usd,
+        "price_symbol": symbol,
     }
 
 
-def paper_portfolio_items(price_usd):
-    status = get_paper_portfolio_status(price_usd)
-
-    return [
+def paper_portfolio_items(price_usd=None, symbol=None):
+    status = get_paper_portfolio_status(price_usd, symbol=symbol)
+    items = [
         {
             "chain": "paper",
             "type": "virtual_cash",
             "symbol": "USDT",
             "balance": str(status["cash_usdt"]),
             "usdValue": status["cash_usdt"],
-        },
-        {
+        }
+    ]
+
+    for asset_symbol, balance in status["asset_balances"].items():
+        items.append({
             "chain": "paper",
             "type": "virtual_asset",
-            "symbol": "BNB",
-            "balance": str(status["bnb_balance"]),
-            "usdValue": status["bnb_value_usdt"],
-        },
-    ]
+            "symbol": asset_symbol,
+            "balance": str(balance),
+            "usdValue": safe_float(status["asset_values_usdt"].get(asset_symbol), 0.0),
+        })
+
+    return items
 
 
 def execute_paper_trade(trade_plan, price_usd):
     price_usd = safe_float(price_usd, 0.0)
+    amount = safe_float(trade_plan.get("amount"), 0.0)
+    from_token = normalize_trade_token(trade_plan.get("from_token"))
+    to_token = normalize_trade_token(trade_plan.get("to_token"))
+    now = datetime.now(timezone.utc).isoformat()
 
     if price_usd <= 0:
         return {
@@ -1303,11 +1221,6 @@ def execute_paper_trade(trade_plan, price_usd):
             "safety_message": "Paper trade blocked: missing market price.",
         }
 
-    amount = safe_float(trade_plan.get("amount"), 0.0)
-    from_token = str(trade_plan.get("from_token", "")).upper()
-    to_token = str(trade_plan.get("to_token", "")).upper()
-    now = datetime.now(timezone.utc).isoformat()
-
     if amount <= 0:
         return {
             "success": False,
@@ -1316,103 +1229,134 @@ def execute_paper_trade(trade_plan, price_usd):
             "safety_message": "Paper trade blocked: amount is zero.",
         }
 
-    if from_token == "USDT" and to_token == "BNB":
+    asset_balances = PAPER_PORTFOLIO.setdefault("asset_balances", {})
+    last_prices = PAPER_PORTFOLIO.setdefault("last_prices_usd", {})
+
+    if from_token == "USDT" and to_token != "USDT":
         if PAPER_PORTFOLIO["cash_usdt"] < amount:
             return {
                 "success": False,
                 "mode": "paper_trading",
                 "blocked": True,
                 "safety_message": "Paper trade blocked: not enough paper USDT.",
-                "paper_portfolio": get_paper_portfolio_status(price_usd),
+                "paper_portfolio": get_paper_portfolio_status(price_usd, symbol=to_token),
             }
 
-        amount_bnb = amount / price_usd
+        amount_asset = amount / price_usd
         PAPER_PORTFOLIO["cash_usdt"] -= amount
-        PAPER_PORTFOLIO["bnb_balance"] += amount_bnb
+        asset_balances[to_token] = safe_float(asset_balances.get(to_token), 0.0) + amount_asset
+        last_prices[to_token] = price_usd
+        _sync_paper_compatibility_fields()
 
         position = {
             "opened_at": now,
+            "symbol": to_token,
             "entry_price_usd": price_usd,
-            "amount_bnb": amount_bnb,
+            "amount_asset": amount_asset,
             "entry_value_usdt": amount,
             "from_token": from_token,
             "to_token": to_token,
             "type": trade_plan.get("type", "paper_trade"),
         }
+        if to_token == "BNB":
+            position["amount_bnb"] = amount_asset
         PAPER_PORTFOLIO["open_positions"].append(position)
 
-        return {
+        result = {
             "success": True,
             "mode": "paper_trading",
-            "action": "paper_buy_bnb",
+            "executed": True,
+            "action": f"paper_buy_{to_token.lower()}",
+            "symbol": to_token,
             "amount_usdt": round(amount, 6),
-            "amount_bnb": round(amount_bnb, 8),
+            "amount_asset": round(amount_asset, 8),
             "price_usd": price_usd,
-            "paper_portfolio": get_paper_portfolio_status(price_usd),
+            "paper_portfolio": get_paper_portfolio_status(price_usd, symbol=to_token),
         }
+        if to_token == "BNB":
+            result["amount_bnb"] = round(amount_asset, 8)
+        return result
 
-    if from_token == "BNB" and to_token == "USDT":
-        sell_bnb = min(amount, PAPER_PORTFOLIO["bnb_balance"])
+    if to_token == "USDT" and from_token != "USDT":
+        available = safe_float(asset_balances.get(from_token), 0.0)
+        sell_asset = min(amount, available)
 
-        if sell_bnb <= 0:
+        if sell_asset <= 0:
             return {
                 "success": False,
                 "mode": "paper_trading",
                 "blocked": True,
-                "safety_message": "Paper trade blocked: not enough paper BNB.",
-                "paper_portfolio": get_paper_portfolio_status(price_usd),
+                "safety_message": f"Paper trade blocked: not enough paper {from_token}.",
+                "paper_portfolio": get_paper_portfolio_status(price_usd, symbol=from_token),
             }
 
-        proceeds = sell_bnb * price_usd
-        remaining_to_close = sell_bnb
+        last_prices[from_token] = price_usd
+        proceeds = sell_asset * price_usd
+        remaining_to_close = sell_asset
         realized_pnl = 0.0
         closed_parts = []
 
-        while remaining_to_close > 0 and PAPER_PORTFOLIO["open_positions"]:
-            position = PAPER_PORTFOLIO["open_positions"][0]
-            position_amount = safe_float(position.get("amount_bnb"), 0.0)
+        for position in list(PAPER_PORTFOLIO["open_positions"]):
+            if remaining_to_close <= 0:
+                break
+            position_symbol = normalize_trade_token(position.get("symbol") or position.get("to_token"))
+            if position_symbol != from_token:
+                continue
+
+            position_amount = safe_float(position.get("amount_asset", position.get("amount_bnb", 0.0)), 0.0)
             close_amount = min(position_amount, remaining_to_close)
             entry_price = safe_float(position.get("entry_price_usd"), price_usd)
             part_pnl = (price_usd - entry_price) * close_amount
 
             realized_pnl += part_pnl
             remaining_to_close -= close_amount
-            position["amount_bnb"] = position_amount - close_amount
+            position["amount_asset"] = position_amount - close_amount
+            if from_token == "BNB":
+                position["amount_bnb"] = position["amount_asset"]
 
             closed_parts.append({
+                "symbol": from_token,
                 "opened_at": position.get("opened_at"),
                 "closed_at": now,
-                "amount_bnb": round(close_amount, 8),
+                "amount_asset": round(close_amount, 8),
                 "entry_price_usd": entry_price,
                 "exit_price_usd": price_usd,
                 "pnl_usdt": round(part_pnl, 6),
                 "pnl_pct": round(((price_usd - entry_price) / entry_price) * 100, 4) if entry_price > 0 else 0.0,
             })
 
-            if position["amount_bnb"] <= 0.00000001:
-                PAPER_PORTFOLIO["open_positions"].pop(0)
+            if position["amount_asset"] <= 0.00000001:
+                PAPER_PORTFOLIO["open_positions"].remove(position)
 
-        PAPER_PORTFOLIO["bnb_balance"] -= sell_bnb
+        asset_balances[from_token] = max(0.0, available - sell_asset)
+        if asset_balances[from_token] <= 0.00000001:
+            asset_balances.pop(from_token, None)
         PAPER_PORTFOLIO["cash_usdt"] += proceeds
         PAPER_PORTFOLIO["realized_pnl_usdt"] += realized_pnl
         PAPER_PORTFOLIO["closed_trades"].extend(closed_parts)
+        _sync_paper_compatibility_fields()
 
-        return {
+        result = {
             "success": True,
             "mode": "paper_trading",
-            "action": "paper_sell_bnb",
-            "amount_bnb": round(sell_bnb, 8),
+            "executed": True,
+            "action": f"paper_sell_{from_token.lower()}",
+            "symbol": from_token,
+            "amount_asset": round(sell_asset, 8),
             "proceeds_usdt": round(proceeds, 6),
             "realized_pnl_usdt": round(realized_pnl, 6),
             "price_usd": price_usd,
-            "paper_portfolio": get_paper_portfolio_status(price_usd),
+            "paper_portfolio": get_paper_portfolio_status(price_usd, symbol=from_token),
         }
+        if from_token == "BNB":
+            result["amount_bnb"] = round(sell_asset, 8)
+        return result
 
     return {
         "success": False,
         "mode": "paper_trading",
         "blocked": True,
-        "safety_message": f"Paper trade blocked: unsupported pair {from_token}->{to_token}.",
+        "safety_message": f"Paper trade blocked: unsupported pair {from_token}->{to_token}. Only USDT↔asset spot trades are supported.",
     }
 
 
@@ -1714,6 +1658,11 @@ def debug_strategies():
 
 @app.post("/agent-cycle")
 def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require_operator_key)):
+    try:
+        actual_binance_timeframe = timeframe_to_binance(request.timeframe)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
     requested_strategy_only_mode = getattr(request, "strategy_only_mode", None)
     if requested_strategy_only_mode is None:
         strategy_only_mode = bool(load_saved_agent_setup().get("strategy_only_mode", False))
@@ -1778,8 +1727,15 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
             cmc_signal["v2_auto_selected_strategy"] = selected_name
             cmc_signal["v2_trade_allowed"] = v2_trade_allowed
 
-    execution_mode = str(getattr(request, "execution_mode", "decision_simulation") or "decision_simulation").lower()
-    live_execution_enabled = execution_mode == "live_trading" or request.live_execution is True
+    try:
+        execution_mode = normalize_execution_mode(
+            getattr(request, "execution_mode", "decision_simulation"),
+            live_execution=request.live_execution,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    live_execution_enabled = execution_mode == "live_trading"
     paper_trading_enabled = execution_mode == "paper_trading"
 
     if strategy_only_mode:
@@ -1851,6 +1807,13 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
             "decision": "HOLD",
             "reason": no_strategy_reason,
             "strategy_only_mode": strategy_only_mode,
+            "diagnostics": {
+                "requested_timeframe": request.timeframe,
+                "actual_binance_timeframe": actual_binance_timeframe,
+                "execution_mode": execution_mode,
+                "selected_strategy_requested": request.selected_strategy,
+                "strategy_loaded": False,
+            },
             "cmc_signal": cmc_signal,
             "x402": x402_market_data,
             "v2_opportunity": v2_opportunity,
@@ -1859,12 +1822,14 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
 
     market_bias = str(cmc_signal.get("market_bias", "unknown")).lower()
     risk_score = backtest.get("risk_adjusted_score", 0)
+    target_token = normalize_trade_token(request.coin)
+
     if paper_trading_enabled:
-        paper_status = get_paper_portfolio_status(cmc_signal.get("price_usd"))
+        paper_status = get_paper_portfolio_status(cmc_signal.get("price_usd"), symbol=target_token)
         portfolio_result = {
             "success": True,
             "execution_layer": "Paper Trading Engine",
-            "portfolio": paper_portfolio_items(cmc_signal.get("price_usd")),
+            "portfolio": paper_portfolio_items(cmc_signal.get("price_usd"), symbol=target_token),
             "paper_portfolio": paper_status,
         }
     else:
@@ -1887,7 +1852,6 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         for item in portfolio_items
     }
 
-    target_token = normalize_trade_token(request.coin)
     target_balance = balances.get(target_token, 0.0)
     bnb_balance = balances.get("BNB", 0.0)
     usdt_balance = balances.get("USDT", 0.0)
@@ -1904,20 +1868,22 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
     execution_result = None
     daily_qualification = get_daily_qualification_status()
 
-    if strategy_only_mode:
-        # The selected strategy controls entries and exits. Competition qualification
-        # trades and their forced closes must not override it.
-        daily_guard_should_trade = False
-        daily_guard_reason = "STRATEGY ONLY MODE: daily qualification forcing is bypassed."
-        forced_close_plan = None
-    else:
-        daily_guard_should_trade, daily_guard_reason = should_force_daily_qualification_trade(
-            live_execution_enabled=live_execution_enabled
-        )
-        forced_close_plan = maybe_build_forced_trade_close_plan(
-            request,
-            cmc_signal,
-            live_execution_enabled=live_execution_enabled,
+    # The daily qualification guard remains active even in strategy-only mode.
+    # Strategy-only controls normal entries/exits; it must not silently disable the
+    # one-live-trade-per-UTC-day competition safety net when that guard is enabled.
+    daily_guard_should_trade, daily_guard_reason = should_force_daily_qualification_trade(
+        live_execution_enabled=live_execution_enabled
+    )
+    forced_close_plan = maybe_build_forced_trade_close_plan(
+        request,
+        cmc_signal,
+        live_execution_enabled=live_execution_enabled,
+    )
+
+    if strategy_only_mode and not daily_guard_should_trade and forced_close_plan is None:
+        daily_guard_reason = (
+            f"STRATEGY ONLY MODE: normal trades follow {strategy['name']}. "
+            f"Daily qualification guard status: {daily_guard_reason}"
         )
 
     if forced_close_plan is not None:
@@ -2164,6 +2130,18 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
             "x402": x402_market_data,
             "v2_opportunity": v2_opportunity,
             "selected_strategy": strategy["name"],
+            "diagnostics": {
+                "requested_timeframe": request.timeframe,
+                "actual_binance_timeframe": actual_binance_timeframe,
+                "execution_mode": execution_mode,
+                "live_execution_enabled": live_execution_enabled,
+                "paper_trading_enabled": paper_trading_enabled,
+                "strategy_source_file": strategy.get("source_file"),
+                "strategy_type": strategy.get("type"),
+                "current_signal": (backtest.get("current_signal") or {}).get("status"),
+                "trade_plan_created": trade_plan is not None,
+                "execution_blocked": bool((execution_result or {}).get("blocked")),
+            },
             "risk_adjusted_score": risk_score,
             "backtest": backtest,
             "confidence_score": agent_analysis["confidence_score"],
@@ -2177,7 +2155,7 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
             "trade_plan": trade_plan,
             "execution_result": execution_result,
             "portfolio": portfolio_result,
-            "paper_portfolio": get_paper_portfolio_status(cmc_signal.get("price_usd")) if paper_trading_enabled else None,
+            "paper_portfolio": get_paper_portfolio_status(cmc_signal.get("price_usd"), symbol=target_token) if paper_trading_enabled else None,
         }
     )
 
@@ -2186,7 +2164,7 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         "mode": "agent_cycle",
         "decision": decision,
         "portfolio": portfolio_result,
-        "paper_portfolio": get_paper_portfolio_status(cmc_signal.get("price_usd")) if paper_trading_enabled else None,
+        "paper_portfolio": get_paper_portfolio_status(cmc_signal.get("price_usd"), symbol=target_token) if paper_trading_enabled else None,
         "execution_mode": execution_mode,
         "coin": request.coin,
         "cmc_signal": cmc_signal,
@@ -2195,6 +2173,18 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         "selected_strategy_requested": request.selected_strategy,
         "strategy_only_mode": strategy_only_mode,
         "selected_strategy": strategy["name"],
+        "diagnostics": {
+            "requested_timeframe": request.timeframe,
+            "actual_binance_timeframe": actual_binance_timeframe,
+            "execution_mode": execution_mode,
+            "live_execution_enabled": live_execution_enabled,
+            "paper_trading_enabled": paper_trading_enabled,
+            "strategy_source_file": strategy.get("source_file"),
+            "strategy_type": strategy.get("type"),
+            "current_signal": (backtest.get("current_signal") or {}).get("status"),
+            "trade_plan_created": trade_plan is not None,
+            "execution_blocked": bool((execution_result or {}).get("blocked")),
+        },
         "risk_adjusted_score": risk_score,
         "backtest": backtest,
         "confidence_score": agent_analysis["confidence_score"],
@@ -2330,28 +2320,19 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
 
     now = datetime.now(timezone.utc)
 
-    # Freeze the live wallet baseline before the autonomous loop can make its first trade.
-    # Existing baselines are immutable and are preserved across stop/start cycles.
-    wallet_baseline_result = ensure_wallet_baseline_captured(force=False)
-
-    # A live agent must never start without a frozen start-wallet snapshot.
-    # This guarantees that no first cycle/trade can happen before START VALUE,
-    # balances, per-token prices, and token USD values have been persisted.
-    if not wallet_baseline_result.get("success") or not wallet_baseline_result.get("baseline"):
-        AUTONOMOUS_STATE["running"] = False
-        AUTONOMOUS_STATE["next_run"] = None
-        AUTONOMOUS_STATE["last_reason"] = (
-            wallet_baseline_result.get("message")
-            or "Autonomous start blocked: wallet baseline could not be captured."
+    try:
+        actual_binance_timeframe = timeframe_to_binance(request.timeframe)
+        normalized_execution_mode = normalize_execution_mode(
+            request.execution_mode,
+            live_execution=request.live_execution,
         )
-        return {
-            "success": False,
-            "mode": "autonomous",
-            "status": "blocked",
-            "wallet_baseline": get_wallet_baseline_snapshot(),
-            "wallet_baseline_capture": wallet_baseline_result,
-            "message": AUTONOMOUS_STATE["last_reason"],
-        }
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    effective_interval_minutes = max(1, int(request.interval_minutes or 1))
+    timeframe_minutes = timeframe_to_minutes(request.timeframe)
+    if timeframe_minutes == 1:
+        effective_interval_minutes = 1
 
     requested_strategy_only_mode = getattr(request, "strategy_only_mode", None)
     if requested_strategy_only_mode is None:
@@ -2364,16 +2345,16 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         timeframe=request.timeframe,
         risk=request.risk,
         initial_capital=request.initial_capital,
-        live_execution=request.live_execution,
-        execution_mode=request.execution_mode,
+        live_execution=normalized_execution_mode == "live_trading",
+        execution_mode=normalized_execution_mode,
         trade_size=request.trade_size,
-        interval_minutes=request.interval_minutes,
+        interval_minutes=effective_interval_minutes,
         selected_strategy=request.selected_strategy,
         strategy_only_mode=strategy_only_mode,
     )
 
     AUTONOMOUS_STATE["running"] = True
-    AUTONOMOUS_STATE["interval_minutes"] = request.interval_minutes
+    AUTONOMOUS_STATE["interval_minutes"] = effective_interval_minutes
     AUTONOMOUS_STATE["last_run"] = None
     AUTONOMOUS_STATE["next_run"] = now.isoformat()
     AUTONOMOUS_STATE["last_decision"] = None
@@ -2385,10 +2366,10 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         timeframe=request.timeframe,
         risk=request.risk,
         initial_capital=request.initial_capital,
-        live_execution=request.live_execution,
-        execution_mode=request.execution_mode,
+        live_execution=normalized_execution_mode == "live_trading",
+        execution_mode=normalized_execution_mode,
         trade_size=request.trade_size,
-        interval_minutes=request.interval_minutes,
+        interval_minutes=effective_interval_minutes,
         selected_strategy=request.selected_strategy,
         strategy_only_mode=strategy_only_mode,
         result_snapshot=request.result_snapshot,
@@ -2407,14 +2388,15 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         "success": True,
         "mode": "autonomous",
         "status": "running",
-        "interval_minutes": request.interval_minutes,
+        "interval_minutes": effective_interval_minutes,
         "trade_size": request.trade_size,
-        "execution_mode": request.execution_mode,
+        "requested_interval_minutes": request.interval_minutes,
+        "execution_mode": normalized_execution_mode,
+        "requested_timeframe": request.timeframe,
+        "actual_binance_timeframe": actual_binance_timeframe,
         "strategy_only_mode": strategy_only_mode,
         "active_config": get_autonomous_config_snapshot(),
         "saved_agent_setup": get_saved_agent_setup_snapshot(),
-        "wallet_baseline": get_wallet_baseline_snapshot(),
-        "wallet_baseline_capture": wallet_baseline_result,
         "next_run": AUTONOMOUS_STATE["next_run"],
         "message": "Autonomous backend loop started.",
     }
@@ -2445,7 +2427,6 @@ def autonomous_status():
         "network": "BNB Smart Chain / BSC",
         "active_config": get_autonomous_config_snapshot(),
         "saved_agent_setup": get_saved_agent_setup_snapshot(),
-        "wallet_baseline": get_wallet_baseline_snapshot(),
         **AUTONOMOUS_STATE,
     }
 
@@ -2495,7 +2476,6 @@ def portfolio():
         "chain": "bsc",
         "network": "BNB Smart Chain / BSC",
         "result": result,
-        "wallet_baseline": get_wallet_baseline_snapshot(),
         "event": event,
     }
 
@@ -2507,37 +2487,11 @@ def trade_log(limit: int = 50):
         "records": read_trade_log(limit),
     }
 
-@app.get("/wallet-baseline")
-def wallet_baseline():
-    restore_wallet_baseline_into_risk_state()
-    return {
-        "success": True,
-        "wallet_baseline": get_wallet_baseline_snapshot(),
-    }
-
-
-@app.post("/wallet-baseline/reset")
-def wallet_baseline_reset(_operator_ok: bool = Depends(require_operator_key)):
-    result = ensure_wallet_baseline_captured(force=True)
-    return {
-        "success": result.get("success", False),
-        "wallet_baseline": get_wallet_baseline_snapshot(),
-        "capture": result,
-        "message": (
-            "Wallet baseline intentionally reset to the current live wallet snapshot."
-            if result.get("success")
-            else result.get("message")
-        ),
-    }
-
-
 @app.get("/risk-status")
 def risk_status():
-    restore_wallet_baseline_into_risk_state()
     return {
         "success": True,
         "risk_control": RISK_STATE,
-        "wallet_baseline": get_wallet_baseline_snapshot(),
     }
 
 
