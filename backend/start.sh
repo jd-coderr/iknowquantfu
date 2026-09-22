@@ -11,7 +11,7 @@ if [ ! -f "$HOME/.twak/wallet.json" ]; then
   if [ "${IKQF_CREATE_WALLET_IF_MISSING:-false}" = "true" ]; then
     : "${TWAK_WALLET_PASSWORD:?TWAK_WALLET_PASSWORD is required to create a TWAK wallet}"
     npx @trustwallet/cli wallet create --password "$TWAK_WALLET_PASSWORD" --no-keychain --skip-password-check --json
-    echo "Created a new TWAK wallet. Set AGENT_WALLET_ADDRESS to the exact BSC address before enabling live trading."
+    echo "Created a new TWAK wallet. IKQF will auto-detect its BSC signing address; AGENT_WALLET_ADDRESS is optional and acts as a mismatch guard."
   else
     echo "No TWAK wallet found at $HOME/.twak/wallet.json. Backend will start, but live trading remains blocked."
   fi

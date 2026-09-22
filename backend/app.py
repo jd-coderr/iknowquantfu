@@ -756,18 +756,32 @@ def persist_wallet_baseline(wallet_baseline):
 
 
 def capture_live_wallet_baseline(force=False):
-    """Capture the current real TWAK wallet as the authoritative start snapshot."""
+    """Capture the current real TWAK wallet as the authoritative start snapshot.
+
+    A persisted baseline is reused only when it belongs to the currently verified
+    TWAK signer. This prevents a redeploy or wallet change from silently carrying
+    forward another wallet's risk baseline.
+    """
+    status = get_twak_status()
+    if not status.get("live_execution_ready"):
+        raise RuntimeError(status.get("reason") or "TWAK signing wallet is not verified.")
+
+    current_address = status.get("agent_address")
     existing = load_wallet_baseline()
     if existing is not None and not force:
-        return existing
+        baseline_address = str(existing.get("agent_address") or "").lower()
+        if current_address and baseline_address == str(current_address).lower():
+            sync_risk_state_to_wallet_baseline(existing)
+            return existing
 
-    result = run_twak_portfolio(address=get_configured_agent_address())
+    result = run_twak_portfolio(address=current_address)
     items = extract_portfolio_items(result)
 
     if not result.get("success") or not items:
         raise RuntimeError("Could not capture live wallet baseline from TWAK portfolio.")
 
     snapshot = build_wallet_baseline(items)
+    snapshot["agent_address"] = current_address
     persist_wallet_baseline(snapshot)
     sync_risk_state_to_wallet_baseline(snapshot)
     return snapshot
@@ -1976,9 +1990,26 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
             "portfolio": paper_portfolio_items(cmc_signal.get("price_usd"), symbol=target_token),
             "paper_portfolio": paper_status,
         }
-    else:
+    elif live_execution_enabled:
         paper_status = None
         portfolio_result = run_twak_portfolio(address=get_configured_agent_address())
+    else:
+        # Decision simulation must not depend on a real TWAK wallet. Give the
+        # decision engine a synthetic USDT-only portfolio based on test capital.
+        paper_status = None
+        simulated_capital = max(0.0, safe_float(request.initial_capital, 0.0))
+        portfolio_result = {
+            "success": True,
+            "execution_layer": "Decision Simulation",
+            "portfolio": [{
+                "symbol": "USDT",
+                "balance": str(simulated_capital),
+                "usdValue": simulated_capital,
+                "usd_value_usd": simulated_capital,
+                "chain": "simulation",
+                "type": "simulated",
+            }],
+        }
 
     portfolio_items = extract_portfolio_items(portfolio_result)
 
