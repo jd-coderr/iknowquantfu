@@ -1,25 +1,32 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
 
-export HOME="${IKQF_HOME:-/data}"
-export IKQF_STATE_DIR="${IKQF_STATE_DIR:-/data/ikqf_state}"
-mkdir -p "$HOME/.twak" "$IKQF_STATE_DIR"
+echo "Starting IKQF backend..."
 
-npm install --omit=dev
+# IMPORTANT: Keep the TWAK wallet in the original location used by this project.
+# Trust Wallet CLI stores wallet.json under ~/.twak, so HOME must remain /root
+# for the existing Railway wallet at /root/.twak/wallet.json to be found.
+export HOME=/root
 
-if [ ! -f "$HOME/.twak/wallet.json" ]; then
-  if [ "${IKQF_CREATE_WALLET_IF_MISSING:-false}" = "true" ]; then
-    : "${TWAK_WALLET_PASSWORD:?TWAK_WALLET_PASSWORD is required to create a TWAK wallet}"
-    npx @trustwallet/cli wallet create --password "$TWAK_WALLET_PASSWORD" --no-keychain --skip-password-check --json
-    echo "Created a new TWAK wallet. IKQF will auto-detect its BSC signing address; AGENT_WALLET_ADDRESS is optional and acts as a mismatch guard."
-  else
-    echo "No TWAK wallet found at $HOME/.twak/wallet.json. Backend will start, but live trading remains blocked."
-  fi
+mkdir -p /root/.twak
+
+echo "TWAK HOME: $HOME"
+echo "TWAK WALLET PATH: /root/.twak/wallet.json"
+
+echo "Installing Node dependencies for TWAK + x402..."
+npm install --omit=dev || npm install
+
+if [ ! -f /root/.twak/wallet.json ]; then
+  echo "No TWAK wallet found. Creating headless wallet..."
+  npx @trustwallet/cli wallet create --password "$TWAK_WALLET_PASSWORD" --no-keychain --skip-password-check --json || true
+else
+  echo "Existing TWAK wallet found."
 fi
 
-if [ -f "$HOME/.twak/wallet.json" ] && [ -n "${TWAK_WALLET_PASSWORD:-}" ]; then
-  npx @trustwallet/cli wallet status --json || true
-  npx @trustwallet/cli wallet address --chain bsc --password "$TWAK_WALLET_PASSWORD" --json || true
-fi
+echo "TWAK wallet status:"
+npx @trustwallet/cli wallet status --json || true
 
-exec uvicorn app:app --host 0.0.0.0 --port "${PORT:-8000}"
+echo "TWAK BSC address:"
+npx @trustwallet/cli wallet address --chain bsc --password "$TWAK_WALLET_PASSWORD" --json || true
+
+echo "Starting FastAPI..."
+exec uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}
