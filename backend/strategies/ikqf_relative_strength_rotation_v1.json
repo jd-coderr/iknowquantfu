@@ -1,0 +1,99 @@
+{
+  "mode": "spot_only",
+  "base_assets": [
+    "USDT"
+  ],
+  "quote_policy": {
+    "start_from": "USDT",
+    "return_to": "USDT_on_exit",
+    "no_shorting": true,
+    "no_leverage": true,
+    "max_open_strategy": 1
+  },
+  "universe_selection": {
+    "source": "eligible_bep20_allowlist_or_top_liquid_bsc_tokens",
+    "max_candidates": 50,
+    "filters": {
+      "min_24h_volume_usd": 20000000,
+      "max_spread_pct": 0.35,
+      "min_liquidity_usd": 500000,
+      "stablecoins_excluded_as_trade_targets": true,
+      "reject_new_or_unknown_tokens": true,
+      "reject_if_major_negative_news": true
+    }
+  },
+  "global_risk": {
+    "max_daily_drawdown_pct": 5.0,
+    "max_total_drawdown_pct": 12.0,
+    "pause_after_loss_minutes": 60,
+    "kill_to_usdt_on_panic": true,
+    "max_deployed_fraction": {
+      "safe": 0.25,
+      "balanced": 0.4,
+      "aggressive": 0.6
+    }
+  },
+  "strategy_id": "ikqf_relative_strength_rotation_v1",
+  "name": "IKQF Relative Strength Rotation",
+  "version": "1.0.0",
+  "description": "Ranks liquid tokens and holds only the strongest candidate. Exits to USDT or rotates when the edge disappears.",
+  "scan_interval_minutes": 5,
+  "scoring": {
+    "score_range": [
+      0,
+      100
+    ],
+    "minimum_entry_score": 84,
+    "minimum_hold_score": 70,
+    "rotate_if_new_candidate_score_exceeds_current_by": 10,
+    "components": {
+      "market_regime": 20,
+      "relative_strength_vs_btc": 25,
+      "relative_strength_vs_top20": 20,
+      "trend_alignment": 15,
+      "volume_expansion": 10,
+      "liquidity_spread": 10
+    }
+  },
+  "market_filter": {
+    "allow_new_longs_if_btc_above_200ema": true,
+    "reduce_size_if_btc_below_50ema": true,
+    "stay_usdt_if_market_panic": true
+  },
+  "entry_rules": [
+    "candidate_has_highest_score",
+    "score_above_minimum_entry_score",
+    "price_above_50ema_or_reclaiming_50ema",
+    "24h_volume_above_minimum",
+    "expected_edge_after_fees_positive"
+  ],
+  "exit_rules": [
+    "score_below_minimum_hold_score",
+    "new_candidate_score_better_by_threshold_after_costs",
+    "price_closes_below_50ema_and_momentum_negative",
+    "hard_stop_loss_hit",
+    "profit_trailing_stop_hit",
+    "market_turns_bearish"
+  ],
+  "risk_management": {
+    "position_fraction": {
+      "safe": 0.25,
+      "balanced": 0.4,
+      "aggressive": 0.55
+    },
+    "hard_stop_loss_pct": {
+      "safe": -4.0,
+      "balanced": -6.0,
+      "aggressive": -8.0
+    },
+    "trailing_stop": {
+      "enabled": true,
+      "activate_after_profit_pct": 2.0,
+      "trail_from_peak_pct": 35
+    },
+    "time_stop": {
+      "enabled": true,
+      "exit_if_score_not_improving_after_minutes": 90
+    }
+  }
+}

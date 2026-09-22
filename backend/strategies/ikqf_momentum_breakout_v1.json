@@ -1,0 +1,82 @@
+{
+  "mode": "spot_only",
+  "base_assets": [
+    "USDT"
+  ],
+  "quote_policy": {
+    "start_from": "USDT",
+    "return_to": "USDT_on_exit",
+    "no_shorting": true,
+    "no_leverage": true,
+    "max_open_strategy": 1
+  },
+  "universe_selection": {
+    "source": "eligible_bep20_allowlist_or_top_liquid_bsc_tokens",
+    "max_candidates": 50,
+    "filters": {
+      "min_24h_volume_usd": 20000000,
+      "max_spread_pct": 0.35,
+      "min_liquidity_usd": 500000,
+      "stablecoins_excluded_as_trade_targets": true,
+      "reject_new_or_unknown_tokens": true,
+      "reject_if_major_negative_news": true
+    }
+  },
+  "global_risk": {
+    "max_daily_drawdown_pct": 5.0,
+    "max_total_drawdown_pct": 12.0,
+    "pause_after_loss_minutes": 60,
+    "kill_to_usdt_on_panic": true,
+    "max_deployed_fraction": {
+      "safe": 0.25,
+      "balanced": 0.4,
+      "aggressive": 0.6
+    }
+  },
+  "strategy_id": "ikqf_momentum_breakout_v1",
+  "name": "IKQF Momentum Breakout",
+  "version": "1.0.0",
+  "description": "Buys strength, not weakness: enters only when resistance breaks with volume and liquidity, then protects gains with a trailing stop.",
+  "scan_interval_minutes": 5,
+  "breakout_detection": {
+    "lookback_high": "20_to_50_candles",
+    "requires_close_above_resistance": true,
+    "volume_multiplier_min": 1.5,
+    "avoid_if_already_extended_pct_above_breakout": 4.0
+  },
+  "entry_rules": [
+    "market_regime_bullish_or_ranging_positive",
+    "price_breaks_recent_high",
+    "volume_spike_confirmed",
+    "spread_and_slippage_safe",
+    "score_above_85"
+  ],
+  "exit_rules": [
+    "failed_breakout_reclaims_below_level",
+    "trailing_stop_hit",
+    "profit_target_or_momentum_exhaustion",
+    "market_panic",
+    "better_opportunity_found"
+  ],
+  "risk_management": {
+    "position_fraction": {
+      "safe": 0.15,
+      "balanced": 0.3,
+      "aggressive": 0.45
+    },
+    "hard_stop_loss_pct": {
+      "safe": -3.0,
+      "balanced": -5.0,
+      "aggressive": -7.0
+    },
+    "trailing_stop": {
+      "enabled": true,
+      "activate_after_profit_pct": 1.5,
+      "trail_from_peak_pct": 25
+    },
+    "time_stop": {
+      "enabled": true,
+      "exit_if_no_follow_through_after_minutes": 45
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "mode": "spot_only",
+  "base_assets": [
+    "USDT"
+  ],
+  "quote_policy": {
+    "start_from": "USDT",
+    "return_to": "USDT_on_exit",
+    "no_shorting": true,
+    "no_leverage": true,
+    "max_open_strategy": 1
+  },
+  "universe_selection": {
+    "source": "eligible_bep20_allowlist_or_top_liquid_bsc_tokens",
+    "max_candidates": 50,
+    "filters": {
+      "min_24h_volume_usd": 20000000,
+      "max_spread_pct": 0.35,
+      "min_liquidity_usd": 500000,
+      "stablecoins_excluded_as_trade_targets": true,
+      "reject_new_or_unknown_tokens": true,
+      "reject_if_major_negative_news": true
+    }
+  },
+  "global_risk": {
+    "max_daily_drawdown_pct": 5.0,
+    "max_total_drawdown_pct": 12.0,
+    "pause_after_loss_minutes": 60,
+    "kill_to_usdt_on_panic": true,
+    "max_deployed_fraction": {
+      "safe": 0.25,
+      "balanced": 0.4,
+      "aggressive": 0.6
+    }
+  },
+  "strategy_id": "ikqf_trend_pullback_v1",
+  "name": "IKQF Trend Pullback",
+  "version": "1.0.0",
+  "description": "Spot-only trend strategy: only buys pullbacks in confirmed uptrends and returns to USDT when trend health breaks.",
+  "scan_interval_minutes": 5,
+  "trend_filter": {
+    "price_above_200ema": true,
+    "ema_50_above_200": true,
+    "btc_market_filter_required": true,
+    "avoid_if_24h_market_red_breadth_above_pct": 70
+  },
+  "entry_rules": [
+    "uptrend_confirmed",
+    "pullback_to_20ema_or_50ema",
+    "tdi_or_rsi_turns_up_from_mid_or_lower_zone",
+    "volume_not_collapsing",
+    "score_above_82"
+  ],
+  "exit_rules": [
+    "price_closes_below_50ema",
+    "ema_50_slope_turns_down",
+    "tdi_cross_down_after_profit",
+    "trailing_stop_hit",
+    "hard_stop_hit",
+    "better_opportunity_found"
+  ],
+  "risk_management": {
+    "position_fraction": {
+      "safe": 0.2,
+      "balanced": 0.35,
+      "aggressive": 0.5
+    },
+    "hard_stop_loss_pct": {
+      "safe": -4.0,
+      "balanced": -6.0,
+      "aggressive": -8.0
+    },
+    "trailing_stop": {
+      "enabled": true,
+      "activate_after_profit_pct": 2.5,
+      "trail_from_peak_pct": 35
+    },
+    "time_stop": {
+      "enabled": true,
+      "exit_if_no_new_high_after_minutes": 180
+    }
+  }
+}

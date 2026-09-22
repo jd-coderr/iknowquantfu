@@ -1,0 +1,194 @@
+{
+    "strategy_name": "IKQF Gridora-Style Adaptive Grid",
+    "strategy_key": "gridora_adaptive_grid",
+    "version": "1.0.0",
+    "description": "Spot-only adaptive grid strategy inspired by Gridora: select volatile liquid allowlisted tokens, avoid falling knives, size the grid band from recent volatility, only trade fee-clearing levels, protect capital with inventory/drawdown/profit guards, and flatten to USDT when risk breaks.",
+    "base_asset": "USDT",
+    "trade_type": "spot_only",
+    "execution_mode": "live_or_paper",
+    "universe_selection": {
+        "quote_assets_allowed": [
+            "USDT",
+            "USDC",
+            "FDUSD",
+            "DAI",
+            "TUSD",
+            "USDD",
+            "USD1"
+        ],
+        "max_markets_selected": 4,
+        "min_24h_volume_usd": 20000000,
+        "exclude_if_7d_change_below_pct": -8.0,
+        "min_24h_range_pct": 1.5,
+        "range_cap_pct": 12.0,
+        "range_weight": 1.5,
+        "liquidity_bonus_usd_per_point": 50000000,
+        "liquidity_bonus_cap": 10.0,
+        "relative_strength_min_clip": -10.0,
+        "relative_strength_max_clip": 15.0,
+        "score_formula": "score = min(range_cap_pct, range_24h_pct) * range_weight + clipped_7d_change + min(liquidity_bonus_cap, volume_24h_usd / liquidity_bonus_usd_per_point)",
+        "bias_rules": {
+            "long_bias_if_7d_change_gte_pct": 5.0,
+            "neutral_if_between_pct": [
+                -5.0,
+                5.0
+            ],
+            "defensive_if_7d_change_lte_pct": -5.0
+        },
+        "selection_logic": [
+            "Only trade tokens from the allowlist against a USD stable quote.",
+            "Reject low-volume tokens before scoring.",
+            "Reject tokens down more than 8% over 7 days to avoid falling knives.",
+            "Reject tokens with known 24h range below 1.5% because the grid may not fill.",
+            "Rank by volatility first, then relative strength, then liquidity.",
+            "Allocate more weight to the highest-ranked token, but do not put all capital into one market."
+        ]
+    },
+    "risk_presets": {
+        "SAFE": {
+            "half_band_cap_pct": 5.0,
+            "requested_levels": 8,
+            "deploy_fraction": 0.5,
+            "max_drawdown_fraction_of_deployed": 0.08,
+            "extra_min_spacing_bps": 40
+        },
+        "BALANCED": {
+            "half_band_cap_pct": 7.0,
+            "requested_levels": 12,
+            "deploy_fraction": 0.75,
+            "max_drawdown_fraction_of_deployed": 0.12,
+            "extra_min_spacing_bps": 30
+        },
+        "AGGRESSIVE": {
+            "half_band_cap_pct": 10.0,
+            "requested_levels": 20,
+            "deploy_fraction": 0.95,
+            "max_drawdown_fraction_of_deployed": 0.18,
+            "extra_min_spacing_bps": 20
+        }
+    },
+    "adaptive_band": {
+        "enabled": true,
+        "vol_band_multiplier": 0.75,
+        "half_band_floor_pct": 1.5,
+        "formula": "half_band = clamp(0.75 * range_24h_pct, half_band_floor_pct, preset.half_band_cap_pct)",
+        "recenter": {
+            "enabled": true,
+            "reason": "If price leaves the band, cancel old grid and relay around the new mid.",
+            "hysteresis_buffer_pct": 0.5,
+            "minimum_seconds_between_recenters": 300
+        }
+    },
+    "fee_aware_spacing": {
+        "enabled": true,
+        "swap_fee_bps_per_leg": 25,
+        "slippage_bps": 10,
+        "gas_bps": 5,
+        "round_trip_fee_floor_bps_formula": "2 * swap_fee_bps_per_leg + slippage_bps + gas_bps",
+        "default_round_trip_fee_floor_bps": 65,
+        "rule": "Reduce grid level count until the smallest adjacent spacing is greater than max(round_trip_fee_floor_bps, preset.extra_min_spacing_bps). If even a 2-level grid cannot clear fees, do not trade."
+    },
+    "strategy_modes": {
+        "range": {
+            "name": "Range Grid",
+            "use_when": "Market is choppy/ranging with no strong trend.",
+            "half_band_pct": 6.0,
+            "requested_levels": 12,
+            "bias": 0,
+            "deploy_fraction": 0.75,
+            "preset": "BALANCED"
+        },
+        "trend_long": {
+            "name": "Trend Grid Long",
+            "use_when": "Positive momentum without extreme greed. Spot bot only opens buy ladder; sells are paired take-profits.",
+            "half_band_pct": 8.0,
+            "requested_levels": 14,
+            "bias": 1,
+            "deploy_fraction": 0.7,
+            "preset": "BALANCED"
+        },
+        "tight_scalp": {
+            "name": "Tight Scalp Grid",
+            "use_when": "Calm low-volatility range, price near mid, enough range to clear fees.",
+            "half_band_pct": 3.0,
+            "requested_levels": 18,
+            "bias": 0,
+            "deploy_fraction": 0.8,
+            "preset": "AGGRESSIVE"
+        },
+        "wide_defensive": {
+            "name": "Wide Defensive Grid",
+            "use_when": "High volatility, uncertainty, squeeze risk, or market is dangerous but not fully halted.",
+            "half_band_pct": 12.0,
+            "requested_levels": 8,
+            "bias": 0,
+            "deploy_fraction": 0.5,
+            "preset": "SAFE"
+        },
+        "flat": {
+            "name": "Flat / Halt",
+            "use_when": "Market too dangerous, drawdown risk elevated, token no longer qualifies, or no fee-clearing edge.",
+            "action": "Sell to USDT and place no new orders.",
+            "is_flat": true
+        }
+    },
+    "grid_execution_rules": {
+        "spacing": "geometric",
+        "initial_orders": "Place BUY orders below mid and SELL orders above mid. For spot-only long-bias mode, place only BUY ladder first; paired SELL take-profits appear after buys fill.",
+        "paired_order_logic": {
+            "on_buy_fill": "Place a SELL one grid level higher for the same size.",
+            "on_sell_fill": "Place a BUY one grid level lower for the same size."
+        },
+        "order_size_formula": "order_quote_size = (portfolio_quote_value * deploy_fraction) / adjusted_level_count",
+        "max_open_positions": 4,
+        "stablecoin_idle_allowed": true
+    },
+    "capital_protection": {
+        "circuit_breaker": {
+            "enabled": true,
+            "check_every_cycle": true,
+            "trip_if_inventory_exceeds_cap": true,
+            "trip_if_unrealized_plus_realized_pnl_below": "-preset.max_drawdown_fraction_of_deployed * deployed_capital",
+            "on_trip": "Cancel all orders, sell inventory back to USDT, halt new trades until next safe cycle."
+        },
+        "profit_guard": {
+            "enabled": true,
+            "trail_fraction": 0.4,
+            "trail_arm_fraction_of_margin": 0.05,
+            "logic": "Once total PnL peaks after exceeding 5% of margin, flatten if PnL gives back 40% or more from the peak."
+        },
+        "account_guard": {
+            "enabled": true,
+            "purpose": "Portfolio-level kill switch, separate from single-grid drawdown.",
+            "recommended_max_account_drawdown_pct": 10.0,
+            "on_trip": "Flatten all positions to USDT and stop."
+        },
+        "allowlist_guard": {
+            "enabled": true,
+            "rule": "Never trade a token outside the approved allowlist."
+        }
+    },
+    "decision_cycle": {
+        "interval_seconds": 300,
+        "steps": [
+            "Read market data for allowlisted tokens.",
+            "Select top volatile, liquid, non-collapsing markets.",
+            "Classify regime: range, trend_long, tight_scalp, wide_defensive, or flat.",
+            "Build adaptive grid around current mid price.",
+            "Fit levels to fee floor.",
+            "Check circuit breaker, profit guard, account guard, and allowlist.",
+            "Place, cancel, or replace grid orders.",
+            "After fills, place paired order one level away.",
+            "Recalculate whether to continue, recenter, rotate token, or flatten."
+        ]
+    },
+    "ikqf_status_labels": {
+        "strategy_display_name": "GRIDORA-STYLE ADAPTIVE GRID",
+        "decision_buy": "GRID BUY ARMED",
+        "decision_sell": "GRID SELL / TAKE PROFIT",
+        "decision_hold": "GRID ACTIVE / WAITING FOR FILL",
+        "decision_flat": "FLAT IN USDT \u2014 RISK OR EDGE FAILED",
+        "risk_warning": "CAPITAL PROTECTION ACTIVE"
+    },
+    "important_note": "This JSON describes the strategy logic. IKQF must have code that reads this file and implements grid orders, paired fills, adaptive bands, scoring, and guardrails. A JSON file alone will not make the existing bot execute a grid unless the backend strategy loader supports these fields."
+}
