@@ -11,6 +11,7 @@ import json
 import os
 import time
 from urllib.request import urlopen, Request
+from trade_safety import ALLOWED_TOKENS
 
 
 DEFAULT_SYMBOLS = [
@@ -69,7 +70,7 @@ def _candidate_from_ticker(row: dict[str, Any]) -> MarketCandidate | None:
         return None
 
     coin = symbol[:-4]
-    if not coin or coin in STABLE_BASES:
+    if not coin or coin in STABLE_BASES or coin not in ALLOWED_TOKENS:
         return None
 
     last_price = _safe_float(row.get("lastPrice"))
@@ -113,7 +114,7 @@ def _fallback_candidates() -> list[dict[str, Any]]:
             trade_count=0,
             source="fallback_watchlist",
         ).to_dict()
-        for s in DEFAULT_SYMBOLS
+        for s in DEFAULT_SYMBOLS if s[:-4] in ALLOWED_TOKENS
     ]
 
 

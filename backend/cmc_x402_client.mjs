@@ -1,7 +1,7 @@
 import axios from "axios";
 import { privateKeyToAccount } from "viem/accounts";
-import { x402Client, x402HTTPClient } from "@x402/axios";
-import { registerExactEvmScheme } from "@x402/evm/exact/client";
+import * as x402Axios from "@x402/axios";
+import * as x402EvmExact from "@x402/evm/exact/client";
 
 const CMC_X402_QUOTES_URL =
   "https://pro-api.coinmarketcap.com/x402/v3/cryptocurrency/quotes/latest";
@@ -23,17 +23,27 @@ function normalizeSymbol(value) {
   );
 }
 
+function headersToObject(headers) {
+  if (!headers) return {};
+
+  if (typeof headers.toJSON === "function") {
+    return headers.toJSON();
+  }
+
+  return Object.fromEntries(Object.entries(headers));
+}
+
 function safeHeaders(headers) {
   const output = {};
-  const source = headers?.toJSON ? headers.toJSON() : Object.fromEntries(Object.entries(headers || {}));
+  const headerObject = headersToObject(headers);
 
-  for (const [key, value] of Object.entries(source)) {
+  for (const [key, value] of Object.entries(headerObject)) {
     const lower = String(key).toLowerCase();
+
     if (
       lower === "authorization" ||
       lower === "payment" ||
       lower === "payment-signature" ||
-      lower === "x-payment" ||
       lower === "x-api-key" ||
       lower === "cookie" ||
       lower === "set-cookie"
@@ -49,96 +59,15 @@ function safeHeaders(headers) {
 
 function extractPrice(payload, symbol) {
   try {
-    const targetSymbol = String(symbol || "").toUpperCase();
-    const data = payload?.data;
+    const data = payload?.data || {};
+    const coinData =
+      data[symbol] || data[symbol.toUpperCase()] || Object.values(data)[0];
 
-    let coinData = null;
-
-    if (Array.isArray(data)) {
-      coinData =
-        data.find(
-          (item) =>
-            String(item?.symbol || "").toUpperCase() === targetSymbol &&
-            item?.is_active === 1 &&
-            item?.cmc_rank
-        ) ||
-        data.find(
-          (item) => String(item?.symbol || "").toUpperCase() === targetSymbol
-        ) ||
-        data[0];
-    } else if (data && typeof data === "object") {
-      coinData =
-        data[targetSymbol] ||
-        data[symbol] ||
-        Object.values(data)[0];
-    }
-
-    const quote = coinData?.quote;
-
-    if (Array.isArray(quote)) {
-      const usdQuote =
-        quote.find((item) => String(item?.symbol || "").toUpperCase() === "USD") ||
-        quote[0];
-
-      const price = usdQuote?.price;
-      return typeof price === "number" ? price : Number(price);
-    }
-
-    const price = quote?.USD?.price;
+    const price = coinData?.quote?.USD?.price;
     return typeof price === "number" ? price : Number(price);
   } catch {
     return null;
   }
-}
-
-function summarizePaymentRequired(paymentRequired) {
-  return {
-    x402Version: paymentRequired?.x402Version ?? null,
-    resource: paymentRequired?.resource ?? null,
-    accepts_count: Array.isArray(paymentRequired?.accepts)
-      ? paymentRequired.accepts.length
-      : null,
-    accepts: Array.isArray(paymentRequired?.accepts)
-      ? paymentRequired.accepts.map((item) => ({
-          scheme: item?.scheme,
-          network: item?.network,
-          amount: item?.amount,
-          asset: item?.asset,
-          payTo: item?.payTo,
-          maxTimeoutSeconds: item?.maxTimeoutSeconds,
-          extra: item?.extra,
-        }))
-      : null,
-  };
-}
-
-function summarizePaymentPayload(paymentPayload) {
-  const inner = paymentPayload?.payload || {};
-  const permit2 = inner?.permit2Authorization || null;
-  const witness = permit2?.witness || null;
-
-  return {
-    x402Version: paymentPayload?.x402Version ?? null,
-    has_payload: Boolean(paymentPayload?.payload),
-    payload_keys: inner ? Object.keys(inner) : [],
-    has_signature: Boolean(inner?.signature),
-    has_authorization: Boolean(inner?.authorization),
-    has_permit2Authorization: Boolean(permit2),
-    has_permit2_witness: Boolean(witness),
-    permit2_from: permit2?.from || null,
-    permit2_spender: permit2?.spender || null,
-    permit2_permitted: permit2?.permitted || null,
-    permit2_witness: witness || null,
-    accepted: paymentPayload?.accepted
-      ? {
-          scheme: paymentPayload.accepted.scheme,
-          network: paymentPayload.accepted.network,
-          amount: paymentPayload.accepted.amount,
-          asset: paymentPayload.accepted.asset,
-          extra: paymentPayload.accepted.extra,
-        }
-      : null,
-  };
 }
 
 async function main() {
@@ -146,6 +75,12 @@ async function main() {
   const privateKey = normalizePrivateKey(
     process.env.X402_EVM_PRIVATE_KEY || process.env.EVM_PRIVATE_KEY
   );
+
+  const wrapAxiosWithPayment =
+    x402Axios.wrapAxiosWithPayment || x402Axios.withPaymentInterceptor;
+  const X402Client = x402Axios.x402Client;
+  const X402HTTPClient = x402Axios.x402HTTPClient;
+  const registerExactEvmScheme = x402EvmExact.registerExactEvmScheme;
 
   if (!privateKey) {
     console.log(
@@ -161,120 +96,58 @@ async function main() {
     process.exit(0);
   }
 
+  if (!X402Client || !registerExactEvmScheme || !wrapAxiosWithPayment) {
+    console.log(
+      JSON.stringify({
+        success: false,
+        paid: false,
+        used_in_decision: false,
+        status: "sdk_missing_exports",
+        message: "Installed x402 SDK does not expose the expected v2 client helpers.",
+        symbol,
+        available_axios_exports: Object.keys(x402Axios),
+        available_evm_exact_exports: Object.keys(x402EvmExact),
+      })
+    );
+    process.exit(0);
+  }
+
   const signer = privateKeyToAccount(privateKey);
-  const client = new x402Client();
+
+  const client = new X402Client();
   registerExactEvmScheme(client, { signer });
-  const httpClient = new x402HTTPClient(client);
 
-  const api = axios.create({
-    timeout: 30000,
-    validateStatus: () => true,
-  });
-
-  let paymentRequired = null;
-  let paymentPayload = null;
-  let paymentHeaders = null;
+  const api = wrapAxiosWithPayment(axios.create(), client);
 
   try {
-    const firstResponse = await api.get(CMC_X402_QUOTES_URL, {
+    const response = await api.get(CMC_X402_QUOTES_URL, {
       params: { symbol },
+      timeout: 30000,
     });
 
-    const getHeader = (name) => {
-      const value =
-        firstResponse.headers?.[name] ||
-        firstResponse.headers?.[String(name).toLowerCase()];
-      return typeof value === "string" ? value : undefined;
-    };
+    const priceUsd = extractPrice(response.data, symbol);
+    const success = Boolean(response.status === 200 && priceUsd);
+
+    let paymentResponse = null;
 
     try {
-      paymentRequired = httpClient.getPaymentRequiredResponse(
-        getHeader,
-        firstResponse.data
-      );
-    } catch {
-      if (firstResponse.data?.x402Version) {
-        paymentRequired = firstResponse.data;
+      if (X402HTTPClient) {
+        const httpClient = new X402HTTPClient(client);
+        paymentResponse = httpClient.getPaymentSettleResponse(
+          (name) => response.headers[String(name).toLowerCase()]
+        );
       }
+    } catch {
+      paymentResponse = null;
     }
-
-    if (!paymentRequired) {
-      console.log(
-        JSON.stringify({
-          success: false,
-          paid: false,
-          used_in_decision: false,
-          status: "payment_required_parse_failed",
-          http_status: firstResponse.status,
-          symbol,
-          wallet_address: signer.address,
-          response_body_preview: firstResponse.data,
-          response_headers: safeHeaders(firstResponse.headers),
-          message: "Could not parse CMC x402 payment requirements.",
-        })
-      );
-      process.exit(0);
-    }
-
-const preferredAccept = (paymentRequired.accepts || []).find((item) => {
-  return (
-    item?.scheme === "exact" &&
-    item?.network === "eip155:8453" &&
-    String(item?.asset || "").toLowerCase() ===
-      "0x833589fcD6eDb6E08f4c7C32D4f71b54bdA02913".toLowerCase() &&
-    item?.extra?.assetTransferMethod === "eip3009"
-  );
-});
-
-if (!preferredAccept) {
-  console.log(
-    JSON.stringify({
-      success: false,
-      paid: false,
-      used_in_decision: false,
-      status: "base_usdc_payment_option_missing",
-      http_status: firstResponse.status,
-      symbol,
-      provider: "CoinMarketCap",
-      protocol: "x402",
-      endpoint: CMC_X402_QUOTES_URL,
-      payment_network: "Base",
-      payment_chain_id: 8453,
-      payment_asset: "USDC",
-      expected_price_usd: "0.01",
-      wallet_address: signer.address,
-      payment_required_debug: summarizePaymentRequired(paymentRequired),
-      response_body_preview: firstResponse.data,
-      response_headers: safeHeaders(firstResponse.headers),
-      message: "CMC did not return a Base USDC eip3009 payment option.",
-    })
-  );
-  process.exit(0);
-}
-
-paymentRequired = {
-  ...paymentRequired,
-  accepts: [preferredAccept],
-};
-
-paymentPayload = await client.createPaymentPayload(paymentRequired);
-paymentHeaders = httpClient.encodePaymentSignatureHeader(paymentPayload);
-
-const paidResponse = await api.get(CMC_X402_QUOTES_URL, {
-  params: { symbol },
-  headers: paymentHeaders,
-});
-
-    const priceUsd = extractPrice(paidResponse.data, symbol);
-    const success = Boolean(paidResponse.status === 200 && priceUsd);
 
     console.log(
       JSON.stringify({
         success,
-        paid: paidResponse.status === 200,
+        paid: response.status === 200,
         used_in_decision: success,
-        status: paidResponse.status === 200 ? "paid" : "request_failed",
-        http_status: paidResponse.status,
+        status: response.status === 200 ? "paid" : "request_failed",
+        http_status: response.status,
         symbol,
         price_usd: priceUsd,
         provider: "CoinMarketCap",
@@ -285,29 +158,31 @@ const paidResponse = await api.get(CMC_X402_QUOTES_URL, {
         payment_asset: "USDC",
         expected_price_usd: "0.01",
         wallet_address: signer.address,
-        payment_required_debug: summarizePaymentRequired(paymentRequired),
-        payment_payload_debug: summarizePaymentPayload(paymentPayload),
-        payment_headers_sent: Object.keys(paymentHeaders),
+        payment_response: paymentResponse,
         payment_response_header_present: Boolean(
-          paidResponse.headers?.["payment-response"] ||
-            paidResponse.headers?.["x-payment-response"]
+          response.headers?.["payment-response"] ||
+            response.headers?.["x-payment-response"]
         ),
-        response_body_preview: paidResponse.data,
-        response_headers: safeHeaders(paidResponse.headers),
+        response_body_preview: response.data,
+        response_headers: safeHeaders(response.headers),
         message:
-          paidResponse.status === 200
-            ? "CMC x402 quote paid and returned successfully."
-            : "CMC x402 request returned non-200 status after sending payment payload.",
+          response.status === 200
+            ? "CMC x402 quote paid and returned successfully through TypeScript SDK."
+            : "CMC x402 request returned non-200 status.",
       })
     );
   } catch (error) {
+    const status = error?.response?.status || null;
+    const data = error?.response?.data || null;
+    const headers = error?.response?.headers || null;
+
     console.log(
       JSON.stringify({
         success: false,
         paid: false,
         used_in_decision: false,
         status: "error",
-        http_status: error?.response?.status || null,
+        http_status: status,
         symbol,
         provider: "CoinMarketCap",
         protocol: "x402",
@@ -317,15 +192,8 @@ const paidResponse = await api.get(CMC_X402_QUOTES_URL, {
         payment_asset: "USDC",
         expected_price_usd: "0.01",
         wallet_address: signer.address,
-        payment_required_debug: paymentRequired
-          ? summarizePaymentRequired(paymentRequired)
-          : null,
-        payment_payload_debug: paymentPayload
-          ? summarizePaymentPayload(paymentPayload)
-          : null,
-        payment_headers_sent: paymentHeaders ? Object.keys(paymentHeaders) : null,
-        response_body_preview: error?.response?.data || null,
-        response_headers: safeHeaders(error?.response?.headers || {}),
+        response_body_preview: data,
+        response_headers: safeHeaders(headers),
         message: error?.message || "CMC x402 TypeScript request failed.",
       })
     );

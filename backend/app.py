@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from backtest import run_backtest, timeframe_to_binance, timeframe_to_minutes
 from cmc_data import get_cmc_signal
-from twak_config import get_twak_status, get_configured_agent_address
+from twak_config import get_twak_status, get_configured_agent_address, validate_live_wallet_identity
 from trade_safety import validate_trade_request, mark_live_trade_executed
 from trade_logger import log_trade, read_trade_log
 from opportunity_engine import build_v2_opportunity
@@ -28,8 +28,6 @@ app.add_middleware(
     allow_origins=[
         "https://www.iknowquantfu.com",
         "https://iknowquantfu.com",
-        "http://www.iknowquantfu.com",
-        "http://iknowquantfu.com",
         "https://www.bergmanntrading.com",
         "https://bergmanntrading.com",
         "http://localhost:5173",
@@ -93,6 +91,17 @@ def operator_status():
     }
 
 
+@app.get("/health")
+def health():
+    # Lightweight liveness endpoint: deliberately avoids spawning the TWAK CLI.
+    return {
+        "success": True,
+        "service": "ikqf-backend",
+        "state_dir": str(STATE_DIR),
+        "live_execution_armed": not LIVE_EXECUTION_KILL_SWITCH,
+    }
+
+
 @app.post("/operator/unlock")
 def operator_unlock(_operator_ok: bool = Depends(require_operator_key)):
     return {
@@ -102,6 +111,8 @@ def operator_unlock(_operator_ok: bool = Depends(require_operator_key)):
     }
 
 BASE_DIR = Path(__file__).resolve().parent
+STATE_DIR = Path(os.getenv("IKQF_STATE_DIR", str(BASE_DIR / "state"))).resolve()
+STATE_DIR.mkdir(parents=True, exist_ok=True)
 STRATEGIES_DIR = BASE_DIR / "strategies"
 
 STRATEGY_FILES = [
@@ -147,9 +158,17 @@ AUTONOMOUS_STATE = {
 
 AUTONOMOUS_THREAD = None
 AUTONOMOUS_CONFIG = None
+# Fail-closed live execution gate. START arms it; STOP trips it immediately.
+LIVE_EXECUTION_KILL_SWITCH = True
 
-AGENT_SETUP_STATE_FILE = BASE_DIR / "agent_setup_state.json"
+AGENT_SETUP_STATE_FILE = STATE_DIR / "agent_setup_state.json"
 SAVED_AGENT_SETUP = None
+
+# Authoritative live-wallet starting snapshot used by the UI and risk reporting.
+# Do not ship a state file with a release package; the deployed backend creates it
+# from the real TWAK wallet. Resetting the baseline overwrites this file.
+WALLET_BASELINE_STATE_FILE = STATE_DIR / "wallet_baseline_state.json"
+WALLET_BASELINE = None
 
 
 def get_default_agent_setup():
@@ -626,6 +645,132 @@ def get_token_price_usd(portfolio_items, symbol):
         return 1.0
 
     return 0.0
+
+
+def extract_portfolio_items(portfolio_result):
+    """Normalize the portfolio array returned by TWAK or wrapped API responses."""
+    if not isinstance(portfolio_result, dict):
+        return []
+
+    candidates = [
+        portfolio_result.get("portfolio"),
+        (portfolio_result.get("result") or {}).get("portfolio") if isinstance(portfolio_result.get("result"), dict) else None,
+        (portfolio_result.get("event") or {}).get("result", {}).get("portfolio")
+        if isinstance(portfolio_result.get("event"), dict) and isinstance((portfolio_result.get("event") or {}).get("result"), dict)
+        else None,
+    ]
+
+    for candidate in candidates:
+        if isinstance(candidate, list):
+            return [item for item in candidate if isinstance(item, dict)]
+
+    return []
+
+
+def build_wallet_baseline(portfolio_items, captured_at=None):
+    """Create the exact immutable snapshot shape consumed by the React UI."""
+    captured_at = captured_at or datetime.now(timezone.utc).isoformat()
+    assets = []
+
+    for item in portfolio_items or []:
+        if not isinstance(item, dict):
+            continue
+
+        symbol = str(item.get("symbol") or item.get("token") or "UNKNOWN").upper()
+        balance = safe_float(item.get("balance"), 0.0)
+        usd_value = safe_float(item.get("usdValue", item.get("usd_value_usd", 0.0)), 0.0)
+
+        if balance > 0 and usd_value >= 0:
+            price_usd = usd_value / balance if usd_value > 0 else 0.0
+        elif symbol == "USDT":
+            price_usd = 1.0
+        else:
+            price_usd = safe_float(item.get("price_usd"), 0.0)
+
+        assets.append({
+            "symbol": symbol,
+            "balance": str(item.get("balance", balance)),
+            "balance_numeric": balance,
+            "price_usd": round(price_usd, 8),
+            "usd_value_usd": round(usd_value, 8),
+            "chain": item.get("chain"),
+            "type": item.get("type"),
+            "address": item.get("address") or item.get("contract"),
+        })
+
+    total_value = sum(safe_float(asset.get("usd_value_usd"), 0.0) for asset in assets)
+
+    return {
+        "captured_at": captured_at,
+        "total_value_usd": round(total_value, 8),
+        "assets": assets,
+        "agent_address": get_configured_agent_address(),
+        "chain": "bsc",
+    }
+
+
+def sync_risk_state_to_wallet_baseline(wallet_baseline):
+    """Keep the risk engine and the UI on the same starting-value baseline."""
+    if not isinstance(wallet_baseline, dict):
+        return
+
+    total = safe_float(wallet_baseline.get("total_value_usd"), 0.0)
+    if total <= 0:
+        return
+
+    RISK_STATE["baseline_portfolio_value_usd"] = total
+    RISK_STATE["peak_portfolio_value_usd"] = total
+    RISK_STATE["current_portfolio_value_usd"] = total
+    RISK_STATE["current_drawdown_pct"] = 0.0
+    RISK_STATE["status"] = "SAFE"
+
+
+def load_wallet_baseline():
+    global WALLET_BASELINE
+
+    if WALLET_BASELINE is not None:
+        return WALLET_BASELINE
+
+    if WALLET_BASELINE_STATE_FILE.exists():
+        try:
+            saved = json.loads(WALLET_BASELINE_STATE_FILE.read_text(encoding="utf-8"))
+            if isinstance(saved, dict) and saved.get("captured_at"):
+                WALLET_BASELINE = saved
+                return WALLET_BASELINE
+        except Exception:
+            pass
+
+    return None
+
+
+def persist_wallet_baseline(wallet_baseline):
+    global WALLET_BASELINE
+    WALLET_BASELINE = wallet_baseline
+
+    # Write through a temporary file so a partial write cannot leave an old or
+    # corrupt snapshot behind if the process is interrupted.
+    temp_file = WALLET_BASELINE_STATE_FILE.with_suffix(".tmp")
+    temp_file.write_text(json.dumps(wallet_baseline, indent=2, default=str), encoding="utf-8")
+    os.replace(temp_file, WALLET_BASELINE_STATE_FILE)
+    return WALLET_BASELINE
+
+
+def capture_live_wallet_baseline(force=False):
+    """Capture the current real TWAK wallet as the authoritative start snapshot."""
+    existing = load_wallet_baseline()
+    if existing is not None and not force:
+        return existing
+
+    result = run_twak_portfolio(address=get_configured_agent_address())
+    items = extract_portfolio_items(result)
+
+    if not result.get("success") or not items:
+        raise RuntimeError("Could not capture live wallet baseline from TWAK portfolio.")
+
+    snapshot = build_wallet_baseline(items)
+    persist_wallet_baseline(snapshot)
+    sync_risk_state_to_wallet_baseline(snapshot)
+    return snapshot
 
 
 def update_risk_state(portfolio_items, portfolio_available=True):
@@ -1616,22 +1761,21 @@ def save_agent_config(request: AgentSetupRequest, _operator_ok: bool = Depends(r
 def register_agent():
     status = get_twak_status()
 
-    if status["status"] != "configured":
+    if not status.get("live_execution_ready"):
         return {
             "success": False,
             "registration": "not_ready",
-            "message": "TWAK agent address is missing.",
+            "agent_address": status.get("agent_address"),
+            "live_cli_agent_address": status.get("live_cli_agent_address"),
+            "message": status.get("reason", "TWAK signing wallet is not verified."),
         }
 
     return {
         "success": True,
-        "registration": "ready_for_onchain_registration",
+        "registration": "ready",
         "agent_address": status["agent_address"],
         "chain": status["chain"],
-        "message": (
-            "TWAK agent address is configured. On-chain registration must be "
-            "completed with TWAK CLI or MCP."
-        ),
+        "message": "TWAK signing wallet is configured and matches the expected agent address.",
     }
 
 
@@ -1645,7 +1789,7 @@ def x402_status(coin: str = "ETH", _operator_ok: bool = Depends(require_operator
 
 
 @app.get("/debug-strategies")
-def debug_strategies():
+def debug_strategies(_operator_ok: bool = Depends(require_operator_key)):
     return {
         "base_dir": str(BASE_DIR),
         "strategies_dir": str(STRATEGIES_DIR),
@@ -1836,14 +1980,7 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         paper_status = None
         portfolio_result = run_twak_portfolio(address=get_configured_agent_address())
 
-    raw_portfolio_items = portfolio_result.get("portfolio") or []
-    portfolio_items = []
-
-    if isinstance(raw_portfolio_items, list):
-        portfolio_items = [
-            item for item in raw_portfolio_items
-            if isinstance(item, dict)
-    ]
+    portfolio_items = extract_portfolio_items(portfolio_result)
 
     position_size = None
 
@@ -2066,6 +2203,16 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                 )
 
                 if allowed:
+                    if not trade_plan["quote_only"]:
+                        wallet_ok, wallet_message = validate_live_wallet_identity()
+                        if LIVE_EXECUTION_KILL_SWITCH:
+                            allowed = False
+                            safety_message = "Blocked: live execution kill switch is active (agent stopped or not armed)."
+                        elif not wallet_ok:
+                            allowed = False
+                            safety_message = f"Blocked: {wallet_message}"
+
+                if allowed:
                     execution_result = run_twak_swap(
                         amount=trade_plan["amount"],
                         from_token=trade_plan["from_token"],
@@ -2230,6 +2377,13 @@ def execute_trade(request: ExecuteTradeRequest, _operator_ok: bool = Depends(req
             "event": event,
         }
 
+    if not request.quote_only:
+        wallet_ok, wallet_message = validate_live_wallet_identity()
+        if LIVE_EXECUTION_KILL_SWITCH:
+            return {"success": False, "mode": "blocked", "safety_message": "Blocked: live execution kill switch is active. Start/arm the agent first."}
+        if not wallet_ok:
+            return {"success": False, "mode": "blocked", "safety_message": f"Blocked: {wallet_message}", "twak_status": get_twak_status()}
+
     result = run_twak_swap(
         amount=request.amount,
         from_token=request.from_token,
@@ -2317,6 +2471,7 @@ def autonomous_loop():
 def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(require_operator_key)):
     global AUTONOMOUS_THREAD
     global AUTONOMOUS_CONFIG
+    global LIVE_EXECUTION_KILL_SWITCH
 
     now = datetime.now(timezone.utc)
 
@@ -2329,6 +2484,17 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
+    if normalized_execution_mode == "live_trading":
+        wallet_ok, wallet_message = validate_live_wallet_identity()
+        if not wallet_ok:
+            LIVE_EXECUTION_KILL_SWITCH = True
+            return {
+                "success": False,
+                "status": "blocked",
+                "message": f"Live start blocked: {wallet_message}",
+                "twak_status": get_twak_status(),
+            }
+
     effective_interval_minutes = max(1, int(request.interval_minutes or 1))
     timeframe_minutes = timeframe_to_minutes(request.timeframe)
     if timeframe_minutes == 1:
@@ -2339,6 +2505,22 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         strategy_only_mode = bool(load_saved_agent_setup().get("strategy_only_mode", False))
     else:
         strategy_only_mode = bool(requested_strategy_only_mode)
+
+    # A real wallet baseline is mandatory only for live mode. Simulation/paper
+    # must remain usable even when no TWAK signing wallet is configured.
+    if normalized_execution_mode == "live_trading":
+        try:
+            wallet_baseline = capture_live_wallet_baseline(force=False)
+        except Exception as error:
+            LIVE_EXECUTION_KILL_SWITCH = True
+            return {
+                "success": False,
+                "status": "blocked",
+                "message": f"Live agent start blocked: wallet baseline could not be captured: {error}",
+                "wallet_baseline": load_wallet_baseline(),
+            }
+    else:
+        wallet_baseline = load_wallet_baseline()
 
     AUTONOMOUS_CONFIG = AgentCycleRequest(
         coin=request.coin,
@@ -2353,6 +2535,7 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         strategy_only_mode=strategy_only_mode,
     )
 
+    LIVE_EXECUTION_KILL_SWITCH = False
     AUTONOMOUS_STATE["running"] = True
     AUTONOMOUS_STATE["interval_minutes"] = effective_interval_minutes
     AUTONOMOUS_STATE["last_run"] = None
@@ -2397,12 +2580,15 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
         "strategy_only_mode": strategy_only_mode,
         "active_config": get_autonomous_config_snapshot(),
         "saved_agent_setup": get_saved_agent_setup_snapshot(),
+        "wallet_baseline": wallet_baseline,
         "next_run": AUTONOMOUS_STATE["next_run"],
         "message": "Autonomous backend loop started.",
     }
     
 @app.post("/autonomous/stop")
 def autonomous_stop(_operator_ok: bool = Depends(require_operator_key)):
+    global LIVE_EXECUTION_KILL_SWITCH
+    LIVE_EXECUTION_KILL_SWITCH = True
     AUTONOMOUS_STATE["running"] = False
     AUTONOMOUS_STATE["next_run"] = None
     AUTONOMOUS_STATE["last_decision"] = None
@@ -2427,11 +2613,12 @@ def autonomous_status():
         "network": "BNB Smart Chain / BSC",
         "active_config": get_autonomous_config_snapshot(),
         "saved_agent_setup": get_saved_agent_setup_snapshot(),
+        "wallet_baseline": load_wallet_baseline(),
         **AUTONOMOUS_STATE,
     }
 
 @app.get("/debug-node")
-def debug_node():
+def debug_node(_operator_ok: bool = Depends(require_operator_key)):
     return {
         "node": shutil.which("node"),
         "npm": shutil.which("npm"),
@@ -2457,6 +2644,29 @@ def paper_portfolio_reset(request: PaperResetRequest, _operator_ok: bool = Depen
     }
 
 
+@app.get("/wallet-baseline")
+def wallet_baseline_status():
+    return {
+        "success": True,
+        "wallet_baseline": load_wallet_baseline(),
+    }
+
+
+@app.post("/wallet-baseline/reset")
+def wallet_baseline_reset(_operator_ok: bool = Depends(require_operator_key)):
+    try:
+        snapshot = capture_live_wallet_baseline(force=True)
+    except Exception as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+    return {
+        "success": True,
+        "wallet_baseline": snapshot,
+        "risk_control": dict(RISK_STATE),
+        "message": "Start wallet baseline reset to the current live TWAK wallet.",
+    }
+
+
 @app.get("/portfolio")
 def portfolio():
     agent_address = get_configured_agent_address()
@@ -2475,6 +2685,7 @@ def portfolio():
         "agent_chain": "bsc",
         "chain": "bsc",
         "network": "BNB Smart Chain / BSC",
+        "wallet_baseline": load_wallet_baseline(),
         "result": result,
         "event": event,
     }
@@ -2507,16 +2718,18 @@ def daily_qualification_status():
 def agent_status():
     status = get_twak_status()
 
-    if status["status"] != "configured":
+    if not status.get("live_execution_ready"):
         return {
             "ready": False,
             "status": "NOT READY",
-            "reason": "TWAK not configured"
+            "reason": status.get("reason", "TWAK signing wallet is not verified"),
+            "twak_status": status,
         }
 
     return {
         "ready": True,
-        "status": "READY FOR REGISTRATION",
+        "status": "READY",
         "agent_address": status["agent_address"],
         "chain": status["chain"],
+        "twak_status": status,
     }

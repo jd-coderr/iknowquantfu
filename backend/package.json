@@ -1,12 +1,13 @@
 {
+  "private": true,
   "scripts": {
-    "postinstall": "npm install -g @trustwallet/cli"
+    "postinstall": "npm install -g @trustwallet/cli@0.19.1"
   },
   "dependencies": {
-    "@trustwallet/cli": "latest",
-    "@x402/axios": "latest",
-    "@x402/evm": "latest",
-    "axios": "latest",
-    "viem": "latest"
+    "@trustwallet/cli": "0.19.1",
+    "@x402/axios": "2.16.0",
+    "@x402/evm": "2.16.0",
+    "axios": "1.18.0",
+    "viem": "2.53.1"
   }
 }

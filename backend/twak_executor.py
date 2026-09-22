@@ -1,264 +1,164 @@
+import json
 import os
+import re
 import shutil
 import subprocess
 from typing import Optional
-import json
-
-
-DEFAULT_AGENT_WALLET_ADDRESS = "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"
 
 
 def clean_address(value: Optional[str]):
     if not value:
         return None
-
     value = str(value).strip()
-
-    if value.startswith("0x") and len(value) == 42:
-        return value
-
-    return None
-
-
-def get_agent_wallet_address(address: Optional[str] = None):
-    return (
-        clean_address(address)
-        or clean_address(os.getenv("AGENT_WALLET_ADDRESS"))
-        or clean_address(os.getenv("TWAK_AGENT_ADDRESS"))
-        or DEFAULT_AGENT_WALLET_ADDRESS
-    )
-
-
-def extract_portfolio_items(parsed):
-    if isinstance(parsed, list):
-        return parsed
-
-    if isinstance(parsed, dict):
-        for key in ("portfolio", "assets", "balances", "tokens"):
-            value = parsed.get(key)
-            if isinstance(value, list):
-                return value
-
-        for key in ("result", "data", "event"):
-            value = parsed.get(key)
-            nested = extract_portfolio_items(value)
-            if nested:
-                return nested
-
-    return []
+    return value if re.fullmatch(r"0x[a-fA-F0-9]{40}", value) else None
 
 
 def get_twak_base_command():
     if os.name == "nt":
-        return [r"C:\Users\oo\AppData\Roaming\npm\twak.cmd"]
-
+        configured = os.getenv("TWAK_COMMAND")
+        if configured:
+            return [configured]
+        legacy = r"C:\Users\oo\AppData\Roaming\npm\twak.cmd"
+        if os.path.exists(legacy):
+            return [legacy]
     if shutil.which("twak"):
         return ["twak"]
-
     return ["npx", "@trustwallet/cli"]
 
 
-def run_twak_swap(
-    amount: str,
-    from_token: str,
-    to_token: str,
-    chain: str = "bsc",
-    slippage: str = "1",
-    quote_only: bool = True,
-    password: Optional[str] = None,
-):
-    cmd = [
-        *get_twak_base_command(),
-        "swap",
-        amount,
-        from_token,
-        to_token,
-        "--chain",
-        chain,
-        "--slippage",
-        slippage,
-        "--json",
-    ]
+def _safe_command(cmd, password=None):
+    text = " ".join(str(x) for x in cmd)
+    return text.replace(password, "***") if password else text
 
-    if quote_only:
-        cmd.append("--quote-only")
 
+def _extract_json(stdout: str):
+    stdout = (stdout or "").strip()
+    if not stdout:
+        return None
+    try:
+        return json.loads(stdout)
+    except Exception:
+        # Some CLI versions print a status line before JSON. Try the first JSON object/array.
+        starts = [p for p in (stdout.find("{"), stdout.find("[")) if p >= 0]
+        if not starts:
+            return None
+        start = min(starts)
+        try:
+            return json.loads(stdout[start:])
+        except Exception:
+            return None
+
+
+def extract_portfolio_items(parsed):
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, dict)]
+    if isinstance(parsed, dict):
+        for key in ("portfolio", "assets", "balances", "tokens"):
+            value = parsed.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+        for key in ("result", "data", "event"):
+            nested = extract_portfolio_items(parsed.get(key))
+            if nested:
+                return nested
+    return []
+
+
+def get_cli_wallet_address(chain: str = "bsc", password: Optional[str] = None):
+    password = password or os.getenv("TWAK_WALLET_PASSWORD")
+    cmd = [*get_twak_base_command(), "wallet", "address", "--chain", chain, "--json"]
     if password:
         cmd.extend(["--password", password])
-
-    safe_command = " ".join(cmd)
-    if password:
-        safe_command = safe_command.replace(password, "***")
-
-    print("TWAK COMMAND:", safe_command, flush=True)
-
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+    except Exception:
+        return None
+    parsed = _extract_json(result.stdout)
+    candidates = []
+    if isinstance(parsed, dict):
+        candidates.extend([parsed.get("address"), (parsed.get("result") or {}).get("address") if isinstance(parsed.get("result"), dict) else None])
+    candidates.append(result.stdout)
+    for candidate in candidates:
+        if not candidate:
+            continue
+        match = re.search(r"0x[a-fA-F0-9]{40}", str(candidate))
+        if match:
+            return clean_address(match.group(0))
+    return None
 
-        print("TWAK SWAP RETURNCODE:", result.returncode, flush=True)
-        print("TWAK SWAP STDOUT:", result.stdout, flush=True)
-        print("TWAK SWAP STDERR:", result.stderr, flush=True)
 
+def run_twak_swap(amount: str, from_token: str, to_token: str, chain: str = "bsc", slippage: str = "1", quote_only: bool = True, password: Optional[str] = None):
+    cmd = [*get_twak_base_command(), "swap", str(amount), str(from_token), str(to_token), "--chain", chain, "--slippage", str(slippage), "--json"]
+    if quote_only:
+        cmd.append("--quote-only")
+    if password:
+        cmd.extend(["--password", password])
+    safe_command = _safe_command(cmd, password)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        parsed = _extract_json(result.stdout)
         return {
             "success": result.returncode == 0,
             "command": safe_command,
             "stdout": result.stdout,
             "stderr": result.stderr,
             "returncode": result.returncode,
+            "parsed": parsed,
         }
-
     except subprocess.TimeoutExpired as error:
-        print("TWAK SWAP TIMEOUT:", str(error), flush=True)
-
-        return {
-            "success": False,
-            "command": safe_command,
-            "stdout": error.stdout or "",
-            "stderr": error.stderr or "TWAK swap timed out after 300 seconds.",
-            "returncode": None,
-            "error": "TIMEOUT",
-        }
-
+        return {"success": False, "command": safe_command, "stdout": error.stdout or "", "stderr": error.stderr or "TWAK swap timed out after 300 seconds.", "returncode": None, "error": "TIMEOUT"}
     except Exception as error:
-        print("TWAK SWAP ERROR:", str(error), flush=True)
+        return {"success": False, "command": safe_command, "stdout": "", "stderr": str(error), "returncode": None, "error": "EXCEPTION"}
 
+
+def run_twak_portfolio(address: Optional[str] = None, chain: str = "bsc", password: Optional[str] = None):
+    """Read the portfolio of the *local signing wallet* and verify its identity.
+
+    TWAK wallet portfolio operates on the local wallet; it is not an arbitrary-address
+    portfolio RPC. Therefore we never pass --address. If a configured address is supplied,
+    it is treated as the expected signing-wallet address and a mismatch is fatal.
+    """
+    expected_address = clean_address(address) or clean_address(os.getenv("AGENT_WALLET_ADDRESS")) or clean_address(os.getenv("TWAK_AGENT_ADDRESS"))
+    password = password or os.getenv("TWAK_WALLET_PASSWORD")
+    live_address = get_cli_wallet_address(chain=chain, password=password)
+
+    if expected_address and live_address and expected_address.lower() != live_address.lower():
         return {
             "success": False,
-            "command": safe_command,
-            "stdout": "",
-            "stderr": str(error),
-            "returncode": None,
-            "error": "EXCEPTION",
+            "portfolio": [],
+            "address": live_address,
+            "address_used": live_address,
+            "expected_address": expected_address,
+            "address_matches": False,
+            "chain": chain,
+            "message": "Configured agent address does not match the local TWAK signing wallet.",
         }
 
+    cmd = [*get_twak_base_command(), "wallet", "portfolio", "--chains", chain, "--json"]
+    if password:
+        cmd.extend(["--password", password])
+    safe_command = _safe_command(cmd, password)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except Exception as error:
+        return {"success": False, "portfolio": [], "address": live_address, "address_used": live_address, "expected_address": expected_address, "address_matches": None if not expected_address or not live_address else False, "chain": chain, "stdout": "", "stderr": str(error), "returncode": None, "command": safe_command, "message": "TWAK portfolio command failed."}
 
-def run_twak_portfolio(address: Optional[str] = None, chain: str = "bsc"):
-    target_address = get_agent_wallet_address(address)
-    base_command = get_twak_base_command()
-
-    if target_address:
-        command_attempts = [
-            [
-                *base_command,
-                "wallet",
-                "portfolio",
-                "--chains",
-                chain,
-                "--address",
-                target_address,
-                "--json",
-            ],
-            [
-                *base_command,
-                "wallet",
-                "portfolio",
-                "--address",
-                target_address,
-                "--chains",
-                chain,
-                "--json",
-            ],
-            [
-                *base_command,
-                "wallet",
-                "portfolio",
-                target_address,
-                "--chains",
-                chain,
-                "--json",
-            ],
-        ]
-    else:
-        command_attempts = [
-            [
-                *base_command,
-                "wallet",
-                "portfolio",
-                "--chains",
-                chain,
-                "--json",
-            ]
-        ]
-
-    attempts = []
-
-    for cmd in command_attempts:
-        print("TWAK PORTFOLIO COMMAND:", cmd, flush=True)
-
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-        except FileNotFoundError as error:
-            return {
-                "success": False,
-                "portfolio": [],
-                "raw_portfolio_response": None,
-                "address": target_address,
-                "address_used": target_address,
-                "chain": chain,
-                "stdout": "",
-                "stderr": str(error),
-                "returncode": None,
-                "command": " ".join(cmd),
-                "message": "TWAK CLI is not installed on this server.",
-            }
-
-        parsed = None
-        portfolio_items = []
-
-        try:
-            parsed = json.loads(result.stdout)
-            portfolio_items = extract_portfolio_items(parsed)
-        except Exception:
-            parsed = None
-            portfolio_items = []
-
-        attempt = {
-            "command": " ".join(cmd),
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "returncode": result.returncode,
-            "parsed": parsed is not None,
-            "portfolio_item_count": len(portfolio_items),
-        }
-        attempts.append(attempt)
-
-        if result.returncode == 0 and parsed is not None:
-            return {
-                "success": True,
-                "command": " ".join(cmd),
-                "portfolio": portfolio_items,
-                "raw_portfolio_response": parsed,
-                "address": target_address,
-                "address_used": target_address,
-                "chain": chain,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode,
-                "attempts": attempts,
-            }
-
+    parsed = _extract_json(result.stdout)
+    items = extract_portfolio_items(parsed)
+    address_matches = None if not expected_address or not live_address else expected_address.lower() == live_address.lower()
+    success = result.returncode == 0 and parsed is not None and (expected_address is None or address_matches is True)
     return {
-        "success": False,
-        "portfolio": [],
-        "raw_portfolio_response": None,
-        "address": target_address,
-        "address_used": target_address,
+        "success": success,
+        "command": safe_command,
+        "portfolio": items if success else [],
+        "raw_portfolio_response": parsed,
+        "address": live_address,
+        "address_used": live_address,
+        "expected_address": expected_address,
+        "address_matches": address_matches,
         "chain": chain,
-        "stdout": attempts[-1]["stdout"] if attempts else "",
-        "stderr": attempts[-1]["stderr"] if attempts else "No TWAK command was attempted.",
-        "returncode": attempts[-1]["returncode"] if attempts else None,
-        "command": attempts[-1]["command"] if attempts else "",
-        "attempts": attempts,
-        "message": f"TWAK portfolio lookup failed for agent address {target_address}.",
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "returncode": result.returncode,
+        "message": "TWAK portfolio loaded from local signing wallet." if success else "TWAK portfolio lookup failed or wallet identity could not be verified.",
     }
-

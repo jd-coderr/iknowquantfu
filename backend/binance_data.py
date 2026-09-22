@@ -15,6 +15,7 @@ def normalize_timeframe(timeframe: str) -> str:
     tf = timeframe.upper()
 
     mapping = {
+        "1M": "1m",
         "5M": "5m",
         "15M": "15m",
         "1H": "1h",
@@ -22,7 +23,9 @@ def normalize_timeframe(timeframe: str) -> str:
         "1D": "1d",
     }
 
-    return mapping.get(tf, "4h")
+    if tf not in mapping:
+        raise ValueError(f"Unsupported timeframe: {timeframe}")
+    return mapping[tf]
 
 
 def get_binance_klines(coin: str, timeframe: str, limit: int = 500):

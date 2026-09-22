@@ -1,28 +1,25 @@
-#!/bin/sh
-echo "Starting Bergmann backend..."
+#!/usr/bin/env bash
+set -euo pipefail
 
-export HOME=/root
+export HOME="${IKQF_HOME:-/data}"
+export IKQF_STATE_DIR="${IKQF_STATE_DIR:-/data/ikqf_state}"
+mkdir -p "$HOME/.twak" "$IKQF_STATE_DIR"
 
-mkdir -p /root/.twak
+npm install --omit=dev
 
-echo "TWAK HOME: $HOME"
-echo "TWAK WALLET PATH: /root/.twak/wallet.json"
-
-echo "Installing Node dependencies for TWAK + x402..."
-npm install --omit=dev || npm install
-
-if [ ! -f /root/.twak/wallet.json ]; then
-  echo "No TWAK wallet found. Creating headless wallet..."
-  npx @trustwallet/cli wallet create --password "$TWAK_WALLET_PASSWORD" --no-keychain --skip-password-check --json || true
-else
-  echo "Existing TWAK wallet found."
+if [ ! -f "$HOME/.twak/wallet.json" ]; then
+  if [ "${IKQF_CREATE_WALLET_IF_MISSING:-false}" = "true" ]; then
+    : "${TWAK_WALLET_PASSWORD:?TWAK_WALLET_PASSWORD is required to create a TWAK wallet}"
+    npx @trustwallet/cli wallet create --password "$TWAK_WALLET_PASSWORD" --no-keychain --skip-password-check --json
+    echo "Created a new TWAK wallet. Set AGENT_WALLET_ADDRESS to the exact BSC address before enabling live trading."
+  else
+    echo "No TWAK wallet found at $HOME/.twak/wallet.json. Backend will start, but live trading remains blocked."
+  fi
 fi
 
-echo "TWAK wallet status:"
-npx @trustwallet/cli wallet status --json || true
+if [ -f "$HOME/.twak/wallet.json" ] && [ -n "${TWAK_WALLET_PASSWORD:-}" ]; then
+  npx @trustwallet/cli wallet status --json || true
+  npx @trustwallet/cli wallet address --chain bsc --password "$TWAK_WALLET_PASSWORD" --json || true
+fi
 
-echo "TWAK BSC address:"
-npx @trustwallet/cli wallet address --chain bsc --password "$TWAK_WALLET_PASSWORD" --json || true
-
-echo "Starting FastAPI..."
-uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}
+exec uvicorn app:app --host 0.0.0.0 --port "${PORT:-8000}"

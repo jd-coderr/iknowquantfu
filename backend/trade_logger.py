@@ -1,35 +1,30 @@
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-LOG_FILE = BASE_DIR / "trade_log.jsonl"
+STATE_DIR = Path(os.getenv("IKQF_STATE_DIR", str(BASE_DIR / "state"))).resolve()
+STATE_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = STATE_DIR / "trade_log.jsonl"
 
 
 def log_trade(event: dict):
-    record = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        **event,
-    }
-
+    record = {"timestamp": datetime.now(timezone.utc).isoformat(), **event}
     with open(LOG_FILE, "a", encoding="utf-8") as file:
-        file.write(json.dumps(record) + "\n")
-
+        file.write(json.dumps(record, default=str) + "\n")
     return record
+
 
 def read_trade_log(limit: int = 50):
     if not LOG_FILE.exists():
         return []
-
     with open(LOG_FILE, "r", encoding="utf-8") as file:
         lines = file.readlines()
-
     records = []
-
-    for line in lines[-limit:]:
+    for line in lines[-max(1, int(limit)):]:
         try:
             records.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-
     return records

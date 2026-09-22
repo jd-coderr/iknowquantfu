@@ -5,7 +5,8 @@ import pandas as pd
 BINANCE_KLINE_ENDPOINTS = [
     "https://api.binance.com/api/v3/klines",
     "https://api1.binance.com/api/v3/klines",
-    "https://api.binance.us/api/v3/klines",
+    "https://api2.binance.com/api/v3/klines",
+    "https://api3.binance.com/api/v3/klines",
 ]
 
 
