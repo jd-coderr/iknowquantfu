@@ -2924,6 +2924,14 @@ async function runAgentCycle() {
         0
       );
 
+      // BNB is the chain gas reserve, not strategy inventory. Its market-price
+      // movement must never be reported as trading profit/loss.
+      const gasReserveUsdValue = assets
+        .filter((asset) => String(asset.symbol || "").toUpperCase() === "BNB")
+        .reduce((sum, asset) => sum + Number(asset.usdValue || 0), 0);
+
+      const tradingUsdValue = totalUsdValue - gasReserveUsdValue;
+
 const baseline = baselineOverride || data?.wallet_baseline || walletBaseline || null;
 
 if (baselineOverride) {
@@ -2932,18 +2940,27 @@ if (baselineOverride) {
   setWalletBaseline(data.wallet_baseline);
 }
 
-const startingValue =
-  baseline?.total_value_usd !== null && baseline?.total_value_usd !== undefined
-    ? Number(baseline.total_value_usd)
-    : null;
+const baselineAssets = Array.isArray(baseline?.assets) ? baseline.assets : [];
+const derivedBaselineTradingValue = baselineAssets
+  .filter((asset) => String(asset?.symbol || "").toUpperCase() !== "BNB")
+  .reduce((sum, asset) => sum + Number(asset?.usd_value_usd ?? asset?.usdValue ?? 0), 0);
+
+const startingTradingValue =
+  baseline?.trading_value_usd !== null && baseline?.trading_value_usd !== undefined
+    ? Number(baseline.trading_value_usd)
+    : baselineAssets.length > 0
+      ? derivedBaselineTradingValue
+      : null;
 
 setPortfolio({
   success: data?.success === true,
   assets,
   totalUsdValue,
-  startingPortfolioValue: startingValue,
+  gasReserveUsdValue,
+  tradingUsdValue,
+  startingPortfolioValue: startingTradingValue,
   startingPortfolioTimestamp: baseline?.captured_at || null,
-  tradingPnlUsd: startingValue === null ? null : totalUsdValue - startingValue,
+  tradingPnlUsd: startingTradingValue === null ? null : tradingUsdValue - startingTradingValue,
 });
     } catch (err) {
       console.error(err);
@@ -3714,7 +3731,7 @@ async function loadTradeHistory() {
                 {portfolio?.assets?.length > 0 ? (
                   portfolio.assets.map((asset, index) => (
                     <p key={index}>
-                      {asset.symbol}.................. {formatAssetBalance(asset.balance)}      {formatMoney(asset.usdValue)}
+                      {asset.symbol}{String(asset.symbol || "").toUpperCase() === "BNB" ? " [GAS]" : ""}.................. {formatAssetBalance(asset.balance)}      {formatMoney(asset.usdValue)}
                     </p>
                   ))
                 ) : portfolioLoading ? (
@@ -3725,11 +3742,13 @@ async function loadTradeHistory() {
 
                 <br />
 
-                <p>TOTAL VALUE.......... {formatMoney(portfolio?.totalUsdValue || 0)}</p>
-                <p>START VALUE.......... {getPortfolioStartValueOnlyLabel()}</p>
-                <p>BASELINE DATE........ {formatPortfolioBaselineDateOnly(walletBaseline?.captured_at)}</p>
+                <p>WALLET TOTAL......... {formatMoney(portfolio?.totalUsdValue || 0)}</p>
+                <p>GAS RESERVE (BNB)..... {formatMoney(portfolio?.gasReserveUsdValue || 0)}</p>
+                <p>TRADING CAPITAL....... {formatMoney(portfolio?.tradingUsdValue || 0)}</p>
+                <p>START TRADING VALUE... {portfolio?.startingPortfolioValue === null || portfolio?.startingPortfolioValue === undefined ? "NOT SET" : formatMoney(portfolio.startingPortfolioValue)}</p>
+                <p>BASELINE DATE......... {formatPortfolioBaselineDateOnly(walletBaseline?.captured_at)}</p>
                 <p>
-                  PORTFOLIO CHANGE.....{" "}
+                  TRADING P&amp;L.........{" "}
                   {portfolio?.tradingPnlUsd === null || portfolio?.tradingPnlUsd === undefined
                     ? "N/A"
                     : `${Number(portfolio.tradingPnlUsd) >= 0 ? "+" : "-"}$${Math.abs(Number(portfolio.tradingPnlUsd)).toFixed(2)}`}
@@ -4955,12 +4974,12 @@ async function loadTradeHistory() {
       : "N/A"}
   </p>
 
-  <p>
-    AGENT TOTAL VALUE.... {formatMoney(portfolio?.totalUsdValue || 0)}
-  </p>
-  <p>START VALUE.......... {getPortfolioStartValueOnlyLabel()}</p>
-  <p>BASELINE DATE........ {formatPortfolioBaselineDateOnly(walletBaseline?.captured_at)}</p>
-  <p>PORTFOLIO CHANGE..... {portfolio?.tradingPnlUsd === null || portfolio?.tradingPnlUsd === undefined
+  <p>AGENT WALLET VALUE.... {formatMoney(portfolio?.totalUsdValue || 0)}</p>
+  <p>BNB GAS RESERVE....... {formatMoney(portfolio?.gasReserveUsdValue || 0)}</p>
+  <p>TRADING CAPITAL....... {formatMoney(portfolio?.tradingUsdValue || 0)}</p>
+  <p>START TRADING VALUE... {portfolio?.startingPortfolioValue === null || portfolio?.startingPortfolioValue === undefined ? "NOT SET" : formatMoney(portfolio.startingPortfolioValue)}</p>
+  <p>BASELINE DATE......... {formatPortfolioBaselineDateOnly(walletBaseline?.captured_at)}</p>
+  <p>TRADING P&amp;L......... {portfolio?.tradingPnlUsd === null || portfolio?.tradingPnlUsd === undefined
     ? "N/A"
     : `${Number(portfolio.tradingPnlUsd) >= 0 ? "+" : "-"}$${Math.abs(Number(portfolio.tradingPnlUsd)).toFixed(2)}`}</p>
   {renderStartWalletSnapshotDetails()}
