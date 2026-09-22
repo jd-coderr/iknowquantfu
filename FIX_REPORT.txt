@@ -1,0 +1,72 @@
+IKQF FIX REPORT — 2026-09-22
+
+STATUS
+- Backend Python compilation: PASS
+- Backend import: PASS
+- Required route presence: PASS
+- Mocked decision-simulation agent cycle: PASS
+- Restored IKQF v2 opportunity engine: PASS
+- Live kill-switch regression: PASS
+- TWAK portfolio command regression (--address removed): PASS
+- start.sh shell syntax: PASS
+- No live blockchain transaction was sent.
+
+MAJOR FIXES
+1. Restored missing V2 modules:
+   opportunity_engine.py
+   market_scanner.py
+   coin_ranker.py
+   regime_detector.py
+   confidence_engine.py
+   capital_allocator.py
+
+2. Live wallet safety:
+   - live trading requires explicit AGENT_WALLET_ADDRESS/TWAK_AGENT_ADDRESS
+   - configured address must match local TWAK signing address
+   - historical hardcoded address cannot make live mode ready
+
+3. TWAK portfolio:
+   - removed unsupported/arbitrary --address portfolio lookup attempts
+   - portfolio reads the local signing wallet
+   - expected-vs-signing wallet mismatch fails closed
+
+4. STOP / kill switch:
+   - STOP trips live execution gate immediately
+   - live agent-cycle checks the gate again immediately before TWAK swap
+   - direct /execute-trade also obeys the gate
+
+5. Persistence:
+   - wallet HOME can use /data
+   - agent setup, wallet baseline, trade log, and cooldown state use IKQF_STATE_DIR
+   - Railway Volume at /data is recommended
+
+6. AUTO/V2:
+   - scanner restricted to live safety allowlist
+   - restored market scan -> regime -> coin rank -> strategy tournament -> confidence -> allocation flow
+
+7. Strategy pack:
+   - seven strategy types actually implemented by backtest.py remain active
+   - newer JSON-only strategies are preserved under strategies_experimental and are NOT falsely activated
+
+8. Data/deployment:
+   - removed Binance.US kline fallback
+   - binance_data supports 1M and rejects unsupported timeframes
+   - backend Node dependencies pinned
+   - debug endpoints protected by operator key
+   - production HTTP CORS origins removed
+
+9. Frontend:
+   - TWAK defaults UNKNOWN instead of falsely CONFIGURED/READY
+   - registration result reflects backend verification
+   - UI no longer claims every TWAK live route is PancakeSwap
+
+REMAINING DEPLOYMENT ACTIONS
+- Mount Railway persistent volume at /data.
+- Set IKQF_ADMIN_KEY.
+- Set TWAK_WALLET_PASSWORD.
+- Set AGENT_WALLET_ADDRESS to the exact BSC address reported by TWAK.
+- Set VITE_API_URL in the frontend.
+- Run frontend npm ci && npm run build in the normal build environment.
+
+IMPORTANT
+The newer experimental strategy JSONs describe logic that needs additional implementation/data (grid lifecycle, news filters, spread/liquidity, rotation state, etc.). Activating them without that implementation would not be a real fix; it would be fake support. They are therefore bundled but inactive.
