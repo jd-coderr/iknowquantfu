@@ -3519,7 +3519,7 @@ async function loadTradeHistory() {
               <div className="simple-metric-row"><span>ROUTE</span><strong>{simpleExecutionRoute}</strong></div>
               <div className="simple-metric-row"><span>LAYER</span><strong>{executionSource}</strong></div>
               <div className="simple-metric-row"><span>WALLET</span><strong>{getSimpleAgentWalletLabel()}</strong></div>
-              <div className="simple-metric-row"><span>ADDRESS</span><strong>{twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</strong></div>
+              <div className="simple-metric-row"><span>ADDRESS</span><strong>{twakAgentAddress || "NOT VERIFIED"}</strong></div>
               <div className="simple-metric-row"><span>TX HASH</span><strong>{simpleTxHash}</strong></div>
               {tradePlan && (
                 <div className="simple-metric-row"><span>SIZE</span><strong>{tradePlan.requested_trade_size ?? tradeSize} {tradePlan.requested_trade_size_token || coin}</strong></div>
@@ -3593,7 +3593,7 @@ async function loadTradeHistory() {
                 <summary>ON-CHAIN VERIFICATION</summary>
                 <div className="metrics strategy-library-box verification-panel">
                   <p><strong>ON-CHAIN VERIFICATION</strong></p>
-                  <p>AGENT ADDRESS........ {shortenAddress(twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C")}</p>
+                  <p>AGENT ADDRESS........ {shortenAddress(twakAgentAddress || "NOT VERIFIED")}</p>
                   <p>SELECTED ASSET..... {coin}</p>
                   <p>TOKEN STATUS....... {coin} / CMC-LISTED ASSET</p>
                   <p>NETWORK............ BNB SMART CHAIN</p>
@@ -3695,7 +3695,7 @@ async function loadTradeHistory() {
                 <p>AGENT NETWORK...... {getAgentNetworkLabel()}</p>
                 <p>AGENT BNB BALANCE.... {getBnbBalanceLabel()}</p>
                 <p>AGENT TOTAL VALUE.... {formatMoney(portfolio?.totalUsdValue || 0)}</p>
-                <p>AGENT ADDRESS: {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
+                <p>AGENT ADDRESS: {twakAgentAddress || "NOT VERIFIED"}</p>
                 <p>ACTIVE TIMEFRAME... {getActiveTimeframeLabel()}</p>
                 <p>SIGNAL ASSET........ {getSignalAssetLabel()}</p>
                 <p>TRADE SIZE.......... {tradeSize} {getSignalAssetLabel()} TARGET</p>
@@ -4965,7 +4965,7 @@ async function loadTradeHistory() {
     : `${Number(portfolio.tradingPnlUsd) >= 0 ? "+" : "-"}$${Math.abs(Number(portfolio.tradingPnlUsd)).toFixed(2)}`}</p>
   {renderStartWalletSnapshotDetails()}
 
-  <p>AGENT ADDRESS........ {twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C"}</p>
+  <p>AGENT ADDRESS........ {twakAgentAddress || "NOT VERIFIED"}</p>
   <p>ACTIVE TIMEFRAME... {getActiveTimeframeLabel()}</p>
   <p>SIGNAL ASSET........ {getSignalAssetLabel()}</p>
   <p>TRADE SIZE.......... {tradeSize} {getSignalAssetLabel()} TARGET</p>
@@ -5185,7 +5185,7 @@ async function loadTradeHistory() {
 
     <div className="metrics strategy-library-box">
       <p><strong>ON-CHAIN VERIFICATION</strong></p>
-      <p>AGENT ADDRESS........ {shortenAddress(twakAgentAddress || "0x695b32DdB023f76dE3FE4de485F7C0131De4754C")}</p>
+      <p>AGENT ADDRESS........ {shortenAddress(twakAgentAddress || "NOT VERIFIED")}</p>
       <p>SELECTED ASSET..... {coin}</p>
       <p>TOKEN STATUS....... {coin} / CMC-LISTED ASSET</p>
       <p>NETWORK............ BNB SMART CHAIN</p>
