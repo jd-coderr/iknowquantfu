@@ -1,0 +1,125 @@
+{
+  "mode": "spot_only",
+  "base_assets": [
+    "USDT"
+  ],
+  "quote_policy": {
+    "start_from": "USDT",
+    "return_to": "USDT_on_exit",
+    "no_shorting": true,
+    "no_leverage": true,
+    "max_open_strategy": 1
+  },
+  "universe_selection": {
+    "source": "eligible_bep20_allowlist_or_top_liquid_bsc_tokens",
+    "max_candidates": 50,
+    "filters": {
+      "min_24h_volume_usd": 20000000,
+      "max_spread_pct": 0.35,
+      "min_liquidity_usd": 500000,
+      "stablecoins_excluded_as_trade_targets": true,
+      "reject_new_or_unknown_tokens": true,
+      "reject_if_major_negative_news": true
+    }
+  },
+  "global_risk": {
+    "max_daily_drawdown_pct": 5.0,
+    "max_total_drawdown_pct": 12.0,
+    "pause_after_loss_minutes": 60,
+    "kill_to_usdt_on_panic": true,
+    "max_deployed_fraction": {
+      "safe": 0.25,
+      "balanced": 0.4,
+      "aggressive": 0.6
+    }
+  },
+  "strategy_id": "ikqf_tdi_bottom_to_top_v1",
+  "name": "IKQF TDI Bottom-to-Top Reversal",
+  "type": "tdi_bottom_to_top_reversal",
+  "version": "1.0.0",
+  "description": "Your original TDI idea, hardened: buy lower TDI reversal only when market and structure confirm, then exit near upper TDI zone or earlier if edge fades.",
+  "scan_interval_minutes": 5,
+  "indicator_settings": {
+    "tdi": {
+      "rsi_period": 13,
+      "price_line": "green",
+      "signal_line": "red",
+      "lower_zone": 32,
+      "upper_zone": 68,
+      "sharkfin_allowed": true
+    },
+    "trend_filters": {
+      "ema_fast": 50,
+      "ema_slow": 200
+    }
+  },
+  "entry_rules": [
+    "tdi_green_below_lower_zone_or_sharkfin_below_band",
+    "tdi_green_crosses_up_red_or_reclaims_lower_zone",
+    "price_not_below_200ema_in_strong_downtrend",
+    "volume_or_structure_confirms_reversal",
+    "confidence_score_above_80"
+  ],
+  "hold_rules": [
+    "hold_while_tdi_green_rising_and_price_structure_intact",
+    "move_stop_to_break_even_after_profit_pct_1_0",
+    "do_not_add_if_tdi_turns_down_again"
+  ],
+  "exit_rules": [
+    "tdi_green_reaches_upper_zone_68",
+    "tdi_green_crosses_down_red_after_profit",
+    "price_loses_reversal_structure",
+    "hard_stop_loss_hit",
+    "time_stop_hit",
+    "market_regime_turns_bearish"
+  ],
+  "risk_management": {
+    "position_fraction": {
+      "safe": 0.15,
+      "balanced": 0.25,
+      "aggressive": 0.35
+    },
+    "hard_stop_loss_pct": {
+      "safe": -3.0,
+      "balanced": -5.0,
+      "aggressive": -7.0
+    },
+    "trailing_stop": {
+      "enabled": true,
+      "activate_after_profit_pct": 2.0,
+      "trail_from_peak_pct": 30
+    },
+    "time_stop": {
+      "enabled": true,
+      "exit_if_tdi_not_above_50_after_minutes": 90
+    }
+  },
+  "entry": {
+    "condition": "Buy after a lower-zone TDI reversal when the fast TDI has recently been below 32, turns up/crosses the slow TDI or reclaims 32, the strong-downtrend filter passes, and volume or price structure confirms the reversal.",
+    "default_threshold": "All four Bottom-to-Top entry rule groups must pass; executable confidence must be above 80/100."
+  },
+  "confirmation": {
+    "condition": "Trend filter plus volume-or-structure confirmation.",
+    "default_threshold": "Reject only when price is below EMA200 while EMA50 is also below EMA200; require above-average volume or close above the previous candle high."
+  },
+  "take_profit": {
+    "condition": "Primary technical exit when fast/green TDI reaches the upper zone at 68, with earlier reduce-risk exits if the edge fades.",
+    "default_threshold": "TDI fast >= 68, with trailing/break-even and strategy exit rules active."
+  },
+  "stop_loss": {
+    "condition": "Hard stop by risk profile plus structure, time, regime, break-even, and trailing protection.",
+    "default_threshold": "Safe -3%, balanced -5%, aggressive -7% hard stop."
+  },
+  "risk_governor": {
+    "max_open_trades": 1,
+    "risk_per_trade": "Controlled by risk_management.position_fraction and hard_stop_loss_pct",
+    "stop_after_consecutive_losses": 2,
+    "avoid_low_volume_conditions": true,
+    "requires_extreme_band_condition": true,
+    "allowed_entry_triggers": [
+      "lower_zone_reversal_confirmed"
+    ],
+    "primary_exit": "tdi_fast_upper_zone_or_earlier_edge_fade",
+    "spot_wallet_rule": "Long buys USDT to selected token. Exit reduces selected token to USDT only if the wallet already holds the token."
+  }
+}

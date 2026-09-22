@@ -1,0 +1,110 @@
+{
+  "mode": "spot_only",
+  "base_assets": [
+    "USDT"
+  ],
+  "quote_policy": {
+    "start_from": "USDT",
+    "return_to": "USDT_on_exit",
+    "no_shorting": true,
+    "no_leverage": true,
+    "max_open_strategy": 1
+  },
+  "universe_selection": {
+    "source": "top_10_to_30_liquid_tokens",
+    "max_candidates": 30,
+    "filters": {
+      "min_24h_volume_usd": 30000000,
+      "max_spread_pct": 0.3,
+      "min_liquidity_usd": 750000,
+      "reject_if_major_negative_news": true,
+      "reject_if_24h_change_below_pct": -18,
+      "reject_if_7d_change_below_pct": -25,
+      "stablecoins_excluded_as_trade_targets": true
+    }
+  },
+  "global_risk": {
+    "max_daily_drawdown_pct": 5.0,
+    "max_total_drawdown_pct": 12.0,
+    "pause_after_loss_minutes": 60,
+    "kill_to_usdt_on_panic": true,
+    "max_deployed_fraction": {
+      "safe": 0.25,
+      "balanced": 0.4,
+      "aggressive": 0.6
+    }
+  },
+  "strategy_id": "ikqf_top_loser_reversal_v1",
+  "name": "IKQF Top Loser Reversal",
+  "version": "1.0.0",
+  "description": "Mean-reversion strategy: watches top liquid coins, finds the hardest dump, but only buys after stabilization/reversal confirmation.",
+  "scan_interval_minutes": 5,
+  "dump_detection": {
+    "lookbacks": [
+      "1h",
+      "4h",
+      "24h"
+    ],
+    "minimum_drop_pct": {
+      "1h": -3.5,
+      "4h": -6.0,
+      "24h": -9.0
+    },
+    "rank_by": "largest_drop_with_liquidity_and_reversal_quality"
+  },
+  "reversal_confirmation": {
+    "required": true,
+    "conditions_any_2_of": [
+      "tdi_green_crosses_up_signal_below_32_or_35",
+      "rsi_reclaims_30_or_35",
+      "price_reclaims_short_ema",
+      "volume_spike_on_green_candle",
+      "lower_wick_rejection_at_support",
+      "1m_or_5m_structure_break_up"
+    ]
+  },
+  "entry_rules": [
+    "coin_is_top_dump_candidate",
+    "market_not_panic",
+    "reversal_confirmation_passed",
+    "spread_and_slippage_safe",
+    "not_in_active_negative_news"
+  ],
+  "exit_rules": [
+    "return_to_break_even_plus_target",
+    "tdi_reaches_midline_or_upper_zone",
+    "momentum_fades",
+    "trailing_stop_hit",
+    "hard_stop_hit",
+    "time_stop_hit"
+  ],
+  "targets": {
+    "take_profit_pct": {
+      "safe": 1.0,
+      "balanced": 1.8,
+      "aggressive": 3.0
+    },
+    "partial_take_profit": {
+      "enabled": true,
+      "sell_fraction_at_first_target": 0.5
+    },
+    "break_even_stop_after_profit_pct": 1.0
+  },
+  "risk_management": {
+    "position_fraction": {
+      "safe": 0.15,
+      "balanced": 0.25,
+      "aggressive": 0.35
+    },
+    "hard_stop_loss_pct": {
+      "safe": -3.0,
+      "balanced": -5.0,
+      "aggressive": -7.0
+    },
+    "time_stop": {
+      "enabled": true,
+      "exit_if_not_green_after_minutes": 60,
+      "exit_if_no_bounce_after_minutes": 30
+    }
+  }
+}

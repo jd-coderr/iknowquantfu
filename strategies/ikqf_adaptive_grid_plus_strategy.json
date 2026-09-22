@@ -1,0 +1,263 @@
+{
+  "strategy_id": "ikqf_adaptive_grid_plus_v1",
+  "name": "IKQF Adaptive Grid Plus",
+  "version": "1.0.0",
+  "description": "Gridora-style adaptive volatility grid with IKQF improvements: opportunity switching, confidence scoring, market-regime gating, stronger capital protection, and USDT-first survival logic.",
+  "mode": "spot_only",
+  "base_assets": [
+    "USDT"
+  ],
+  "quote_policy": {
+    "start_from": "USDT",
+    "return_to": "USDT_on_exit",
+    "no_shorting": true,
+    "no_leverage": true,
+    "max_open_strategy": 1
+  },
+  "universe_selection": {
+    "source": "eligible_bep20_allowlist",
+    "max_candidates": 50,
+    "prefer_top_market_cap": true,
+    "filters": {
+      "min_24h_volume_usd": 20000000,
+      "min_24h_range_pct": 1.5,
+      "max_spread_pct": 0.35,
+      "min_liquidity_usd": 500000,
+      "reject_if_7d_change_below_pct": -8,
+      "reject_if_24h_change_below_pct": -12,
+      "reject_if_major_negative_news": true,
+      "reject_new_or_unknown_tokens": true,
+      "stablecoins_excluded_as_trade_targets": true
+    },
+    "scoring": {
+      "volatility_weight": 1.35,
+      "relative_strength_weight": 1.15,
+      "liquidity_weight": 1.0,
+      "trend_health_weight": 0.85,
+      "fee_efficiency_weight": 0.75,
+      "drawdown_penalty_weight": 1.4,
+      "falling_knife_penalty_weight": 1.6
+    }
+  },
+  "market_regime_filter": {
+    "enabled": true,
+    "btc_trend_filter": {
+      "avoid_new_longs_if_btc_below_200ema": true,
+      "reduce_size_if_btc_below_50ema": true
+    },
+    "market_states": {
+      "bullish": {
+        "allow_trading": true,
+        "grid_bias": "long_neutral",
+        "deployed_fraction_multiplier": 1.0
+      },
+      "ranging": {
+        "allow_trading": true,
+        "grid_bias": "neutral",
+        "deployed_fraction_multiplier": 0.85
+      },
+      "bearish": {
+        "allow_trading": false,
+        "action": "hold_USDT_or_flatten_existing_position"
+      },
+      "panic": {
+        "allow_trading": false,
+        "action": "kill_to_USDT"
+      }
+    }
+  },
+  "confidence_engine": {
+    "enabled": true,
+    "score_range": [
+      0,
+      100
+    ],
+    "minimum_entry_score": 82,
+    "minimum_hold_score": 68,
+    "rotate_if_new_candidate_score_exceeds_current_by": 10,
+    "components": {
+      "market_regime": 20,
+      "token_volatility_quality": 20,
+      "relative_strength": 15,
+      "liquidity_and_spread": 15,
+      "grid_fee_margin": 10,
+      "trend_health": 10,
+      "recent_strategy_expectancy": 10
+    },
+    "decisions": {
+      "score_below_entry_threshold": "stay_USDT",
+      "holding_score_below_hold_threshold": "sell_to_USDT",
+      "better_opportunity_found": "rotate_after_fee_and_slippage_check"
+    }
+  },
+  "adaptive_grid": {
+    "enabled": true,
+    "price_band": {
+      "method": "recent_range_volatility_sized",
+      "lookback": "24h_high_low_plus_ATR",
+      "lower_upper_clamps_by_risk": {
+        "safe": {
+          "min_band_pct": 2.5,
+          "max_band_pct": 7.0
+        },
+        "balanced": {
+          "min_band_pct": 4.0,
+          "max_band_pct": 11.0
+        },
+        "aggressive": {
+          "min_band_pct": 6.0,
+          "max_band_pct": 16.0
+        }
+      },
+      "recenter_hysteresis_pct": 1.2,
+      "do_not_recenter_more_than_once_per_minutes": 20
+    },
+    "levels": {
+      "safe": 5,
+      "balanced": 7,
+      "aggressive": 9
+    },
+    "spacing": {
+      "fee_aware": true,
+      "minimum_spacing_formula": "2 * swap_fee_pct + expected_slippage_pct + gas_cost_pct + safety_margin_pct",
+      "safety_margin_pct": 0.25,
+      "skip_grid_if_spacing_not_profitable": true
+    },
+    "order_logic": {
+      "buy_below_mid": true,
+      "sell_above_mid": true,
+      "filled_buy_arms_sell_one_level_higher": true,
+      "filled_sell_arms_buy_one_level_lower": true,
+      "swap_fallback_if_limit_orders_unavailable": true
+    }
+  },
+  "opportunity_switching": {
+    "enabled": true,
+    "scan_interval_minutes": 5,
+    "switch_only_if": {
+      "new_score_advantage_min": 10,
+      "expected_gain_after_costs_pct_min": 0.8,
+      "current_position_not_in_profit_guard_lock": true,
+      "new_token_passes_all_filters": true
+    },
+    "switch_action": "close_current_to_USDT_then_start_new_grid",
+    "cooldown_after_switch_minutes": 30
+  },
+  "risk_management": {
+    "portfolio_deployed_fraction": {
+      "safe": 0.25,
+      "balanced": 0.4,
+      "aggressive": 0.6
+    },
+    "per_grid_max_inventory_fraction": {
+      "safe": 0.25,
+      "balanced": 0.4,
+      "aggressive": 0.6
+    },
+    "per_order_fraction_of_portfolio": {
+      "safe": 0.05,
+      "balanced": 0.065,
+      "aggressive": 0.08
+    },
+    "hard_stop_loss": {
+      "enabled": true,
+      "safe_pct": -4.0,
+      "balanced_pct": -6.5,
+      "aggressive_pct": -9.0,
+      "action": "sell_to_USDT_and_pause"
+    },
+    "circuit_breaker": {
+      "enabled": true,
+      "max_daily_drawdown_pct": 5.0,
+      "max_total_drawdown_pct": 12.0,
+      "max_consecutive_losing_episodes": 3,
+      "action": "cancel_orders_flatten_to_USDT_pause"
+    },
+    "pause_rules": {
+      "after_hard_stop_minutes": 60,
+      "after_circuit_breaker_hours": 12,
+      "after_three_failed_rotations_hours": 6
+    }
+  },
+  "profit_protection": {
+    "profit_guard_enabled": true,
+    "activate_after_unrealized_profit_pct": 2.0,
+    "trail_from_peak_pct": 30,
+    "minimum_bank_profit_pct": 0.8,
+    "sell_to_USDT_on_profit_guard_trigger": true,
+    "time_stop": {
+      "enabled": true,
+      "exit_if_no_closed_profitable_grid_after_minutes": 90,
+      "exit_if_position_negative_after_minutes": 45
+    }
+  },
+  "entry_rules": {
+    "must_pass_market_regime": true,
+    "must_pass_universe_filters": true,
+    "must_pass_confidence_score": true,
+    "must_have_profitable_grid_spacing": true,
+    "must_not_be_falling_knife": true,
+    "falling_knife_definition": {
+      "drop_1h_pct_below": -6.0,
+      "drop_24h_pct_below": -12.0,
+      "requires_reversal_confirmation_if_triggered": true
+    }
+  },
+  "exit_rules": {
+    "exit_to_USDT_if": [
+      "confidence_score_below_minimum_hold_score",
+      "hard_stop_loss_hit",
+      "circuit_breaker_hit",
+      "profit_guard_triggered",
+      "market_regime_turns_bearish_or_panic",
+      "better_opportunity_after_costs_found",
+      "time_stop_triggered",
+      "token_fails_allowlist_or_liquidity_filter"
+    ]
+  },
+  "logging_and_learning": {
+    "record_every_cycle": true,
+    "record_fields": [
+      "timestamp",
+      "market_regime",
+      "candidate_scores",
+      "chosen_token",
+      "confidence_score",
+      "grid_band",
+      "levels",
+      "spacing",
+      "reason_for_entry",
+      "reason_for_hold",
+      "reason_for_exit",
+      "fees",
+      "slippage",
+      "realized_pnl",
+      "unrealized_pnl",
+      "drawdown"
+    ],
+    "use_recent_expectancy_in_score": true,
+    "expectancy_lookback_trades": 50,
+    "disable_strategy_if_profit_factor_below": 0.9
+  },
+  "execution_safety": {
+    "require_operator_live_unlock": true,
+    "quote_before_trade": true,
+    "max_slippage_pct": 1.0,
+    "reject_if_gas_cost_too_high": true,
+    "only_trade_allowlisted_tokens": true,
+    "always_flatten_to_USDT_on_kill_switch": true
+  },
+  "ikqf_display": {
+    "strategy_label": "ADAPTIVE GRID PLUS",
+    "public_summary": "Scans liquid BEP-20 tokens, selects volatile-but-healthy markets, runs a fee-aware adaptive grid, and exits to USDT when the edge disappears.",
+    "status_lines": [
+      "MARKET REGIME",
+      "BEST TOKEN SCORE",
+      "CURRENT HOLD SCORE",
+      "GRID BAND",
+      "PROFIT GUARD",
+      "DRAWDOWN GUARD",
+      "NEXT OPPORTUNITY SCAN"
+    ]
+  }
+}

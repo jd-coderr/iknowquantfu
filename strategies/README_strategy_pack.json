@@ -1,0 +1,36 @@
+{
+  "pack": "IKQF strategy pack",
+  "note": "Configs describe strategy logic. IKQF backend must implement/loading these fields for live execution.",
+  "strategies": [
+    {
+      "file": "ikqf_relative_strength_rotation_v1.json",
+      "name": "IKQF Relative Strength Rotation",
+      "purpose": "Ranks liquid tokens and holds only the strongest candidate. Exits to USDT or rotates when the edge disappears."
+    },
+    {
+      "file": "ikqf_top_loser_reversal_v1.json",
+      "name": "IKQF Top Loser Reversal",
+      "purpose": "Mean-reversion strategy: watches top liquid coins, finds the hardest dump, but only buys after stabilization/reversal confirmation."
+    },
+    {
+      "file": "ikqf_tdi_bottom_to_top_v1.json",
+      "name": "IKQF TDI Bottom-to-Top Reversal",
+      "purpose": "Your original TDI idea, hardened: buy lower TDI reversal only when market and structure confirm, then exit near upper TDI zone or earlier if edge fades."
+    },
+    {
+      "file": "ikqf_trend_pullback_v1.json",
+      "name": "IKQF Trend Pullback",
+      "purpose": "Spot-only trend strategy: only buys pullbacks in confirmed uptrends and returns to USDT when trend health breaks."
+    },
+    {
+      "file": "ikqf_momentum_breakout_v1.json",
+      "name": "IKQF Momentum Breakout",
+      "purpose": "Buys strength, not weakness: enters only when resistance breaks with volume and liquidity, then protects gains with a trailing stop."
+    },
+    {
+      "file": "ikqf_regime_switcher_v1.json",
+      "name": "IKQF Regime Switcher",
+      "purpose": "Meta-strategy that chooses which strategy to run based on market regime: trend, range, mean reversion, breakout, grid, or USDT flat."
+    }
+  ]
+}

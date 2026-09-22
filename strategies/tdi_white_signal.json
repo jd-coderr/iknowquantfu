@@ -1,54 +1,33 @@
 {
   "name": "TDI Sharkfin Reversal",
   "type": "tdi_signal_reversal",
-  "version": "original_white_signal_restored_optimizer_compatible",
-  "description": "Original TradingView TDI white-label sharkfin strategy. Trades only the white BUY and white SELL label signals from the uploaded Pine script.",
-  "entry": "BUY when the original white BUY label appears: fastMA[2] < 32, fastMA[1] > fastMA[2], fastMA > fastMA[1], and fastMA < 32. SELL / reduce when the original white SELL label appears: fastMA[2] > 68, fastMA[1] < fastMA[2], fastMA < fastMA[1], and fastMA > 68.",
-  "confirmation": "Confirmed only by the original white label signal itself. The turquoise wait crosses, TDI Bollinger-band pierces, and signal-line 68/32 exits are ignored.",
-  "take_profit": "1.0%",
-  "stop_loss": "0.5%",
-  "risk_governor": "Spot trading only. White BUY converts USDT to the selected token. White SELL converts the selected token back to USDT only if the wallet already holds that token. No synthetic shorts. Max open trade: 1.",
-  "source_indicator": {
-    "name": "TDI Divergence w/ Sharkfins & Divergence",
-    "signal_source": "Original white plotshape labels only",
-    "pine_fast_ma": "ta.sma(ta.rsi(close, 13), 2)",
-    "band_low": 32,
-    "band_high": 68
+  "entry": {
+    "condition": "Enter only on the original white-label TDI sharkfin signal: fast TDI curls upward while still below 32 for a buy, or curls downward while still above 68 for a sell/reduce signal.",
+    "default_threshold": "Long: 3-bar fast-TDI sharkfin below 32. Sell/reduce: 3-bar fast-TDI sharkfin above 68."
   },
-  "white_signal_rules": {
-    "buy_signal": {
-      "name": "tdi_white_buy_signal",
-      "logic": "fastMA[2] < 32 and fastMA[1] > fastMA[2] and fastMA > fastMA[1] and fastMA < 32"
-    },
-    "sell_signal": {
-      "name": "tdi_white_sell_signal",
-      "logic": "fastMA[2] > 68 and fastMA[1] < fastMA[2] and fastMA < fastMA[1] and fastMA > 68"
-    }
+  "confirmation": {
+    "condition": "The fast TDI must form the original three-bar sharkfin sequence. Turquoise crosses are wait markers and are not trade signals.",
+    "default_threshold": "White-label sharkfin only; no TDI Bollinger-band triggers."
   },
-  "ignored_signals": [
-    "bandBuySignal turquoise cross",
-    "bandSellSignal turquoise cross",
-    "TDI Bollinger-band pierce",
-    "TDI Bollinger-band sharkfin",
-    "signal-line 68 exit without a white SELL label",
-    "signal-line 32 exit without a white BUY label"
-  ],
-  "valid_triggers": [
-    "tdi_white_buy_signal",
-    "tdi_white_sell_signal"
-  ],
-  "invalid_triggers_removed": [
-    "lower_tdi_bollinger_sharkfin_long",
-    "upper_tdi_bollinger_sharkfin_short",
-    "tdi_signal_line_exit_68",
-    "tdi_signal_line_exit_32",
-    "tdi_signal_line_68_or_upper_sharkfin_exit",
-    "tdi_signal_line_32_or_lower_sharkfin_exit"
-  ],
-  "spot_trading_rule": "White BUY opens/reloads selected-token exposure from USDT. White SELL closes/reduces selected-token exposure to USDT only when a token balance exists.",
-  "risk": {
-    "take_profit_percent": 1.0,
-    "stop_loss_percent": 0.5,
-    "max_open_trades": 1
+  "take_profit": {
+    "condition": "Backtest/live strategy statistics use a 1.0% price take-profit for the white-label signal.",
+    "default_threshold": "1.0% price take-profit"
+  },
+  "stop_loss": {
+    "condition": "Backtest/live strategy statistics use a 0.5% price stop-loss for the white-label signal.",
+    "default_threshold": "0.5% price stop-loss"
+  },
+  "risk_governor": {
+    "max_open_trades": 1,
+    "risk_per_trade": "1%",
+    "stop_after_consecutive_losses": 2,
+    "avoid_low_volume_conditions": true,
+    "requires_extreme_band_condition": true,
+    "allowed_entry_triggers": [
+      "fixed_32_sharkfin_long",
+      "fixed_68_sharkfin_short"
+    ],
+    "primary_exit": "price_take_profit_1_0pct_or_stop_loss_0_5pct",
+    "spot_wallet_rule": "Long buys USDT to selected token. Sell/exit reduces selected token to USDT only if the wallet already holds the token."
   }
 }
