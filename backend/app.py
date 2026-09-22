@@ -626,8 +626,33 @@ def attach_tx_hash(execution_result):
     return execution_result
 
 
+GAS_RESERVE_SYMBOLS = {"BNB"}
+
+
+def is_gas_reserve_asset(item):
+    return str((item or {}).get("symbol", "")).upper() in GAS_RESERVE_SYMBOLS
+
+
 def get_portfolio_value_usd_from_items(portfolio_items):
-    return sum(safe_float(item.get("usdValue", 0)) for item in portfolio_items)
+    """Full wallet mark-to-market value, including BNB kept for gas."""
+    return sum(safe_float(item.get("usdValue", 0)) for item in portfolio_items or [])
+
+
+def get_trading_portfolio_value_usd_from_items(portfolio_items):
+    """Strategy equity only. BNB gas reserve is deliberately excluded."""
+    return sum(
+        safe_float(item.get("usdValue", 0))
+        for item in portfolio_items or []
+        if not is_gas_reserve_asset(item)
+    )
+
+
+def get_gas_reserve_value_usd_from_items(portfolio_items):
+    return sum(
+        safe_float(item.get("usdValue", 0))
+        for item in portfolio_items or []
+        if is_gas_reserve_asset(item)
+    )
 
 
 def get_token_price_usd(portfolio_items, symbol):
@@ -699,10 +724,25 @@ def build_wallet_baseline(portfolio_items, captured_at=None):
         })
 
     total_value = sum(safe_float(asset.get("usd_value_usd"), 0.0) for asset in assets)
+    trading_value = sum(
+        safe_float(asset.get("usd_value_usd"), 0.0)
+        for asset in assets
+        if str(asset.get("symbol", "")).upper() not in GAS_RESERVE_SYMBOLS
+    )
+    gas_reserve_value = total_value - trading_value
+
+    for asset in assets:
+        asset["portfolio_role"] = (
+            "gas_reserve"
+            if str(asset.get("symbol", "")).upper() in GAS_RESERVE_SYMBOLS
+            else "trading"
+        )
 
     return {
         "captured_at": captured_at,
         "total_value_usd": round(total_value, 8),
+        "trading_value_usd": round(trading_value, 8),
+        "gas_reserve_value_usd": round(gas_reserve_value, 8),
         "assets": assets,
         "agent_address": get_configured_agent_address(),
         "chain": "bsc",
@@ -714,7 +754,24 @@ def sync_risk_state_to_wallet_baseline(wallet_baseline):
     if not isinstance(wallet_baseline, dict):
         return
 
-    total = safe_float(wallet_baseline.get("total_value_usd"), 0.0)
+    # Risk and performance must track tradable strategy equity, not the BNB
+    # reserve whose only purpose is paying gas. Older saved baselines are
+    # migrated on read by deriving trading equity from their asset rows.
+    trading_total = wallet_baseline.get("trading_value_usd")
+    if trading_total is None:
+        baseline_assets = wallet_baseline.get("assets") or []
+        trading_total = sum(
+            safe_float(asset.get("usd_value_usd", asset.get("usdValue", 0.0)), 0.0)
+            for asset in baseline_assets
+            if str(asset.get("symbol", "")).upper() not in GAS_RESERVE_SYMBOLS
+        )
+        if baseline_assets:
+            wallet_baseline["trading_value_usd"] = round(trading_total, 8)
+            wallet_baseline["gas_reserve_value_usd"] = round(
+                safe_float(wallet_baseline.get("total_value_usd"), 0.0) - trading_total, 8
+            )
+
+    total = safe_float(trading_total, 0.0)
     if total <= 0:
         return
 
@@ -792,7 +849,7 @@ def update_risk_state(portfolio_items, portfolio_available=True):
         RISK_STATE["status"] = "PORTFOLIO UNAVAILABLE"
         return dict(RISK_STATE)
 
-    portfolio_value = get_portfolio_value_usd_from_items(portfolio_items)
+    portfolio_value = get_trading_portfolio_value_usd_from_items(portfolio_items)
 
     if portfolio_value > 0:
         if RISK_STATE["baseline_portfolio_value_usd"] is None:
@@ -2539,9 +2596,16 @@ def autonomous_start(request: AutonomousRequest, _operator_ok: bool = Depends(re
 
     # A real wallet baseline is mandatory only for live mode. Simulation/paper
     # must remain usable even when no TWAK signing wallet is configured.
+    #
+    # Baseline semantics: this is the START WALLET SNAPSHOT for the current
+    # autonomous live session, not a lifetime/account baseline. Therefore a
+    # fresh live START captures a fresh value and timestamp. Repeated start
+    # calls while the same session is already running reuse the active snapshot
+    # so a refresh/double-click cannot rewrite performance history mid-session.
+    already_running = bool(AUTONOMOUS_STATE.get("running"))
     if normalized_execution_mode == "live_trading":
         try:
-            wallet_baseline = capture_live_wallet_baseline(force=False)
+            wallet_baseline = capture_live_wallet_baseline(force=not already_running)
         except Exception as error:
             LIVE_EXECUTION_KILL_SWITCH = True
             return {
@@ -2709,6 +2773,11 @@ def portfolio():
         "result": result,
     })
 
+    items = extract_portfolio_items(result)
+    total_wallet_value = get_portfolio_value_usd_from_items(items)
+    trading_value = get_trading_portfolio_value_usd_from_items(items)
+    gas_reserve_value = get_gas_reserve_value_usd_from_items(items)
+
     return {
         "success": result["success"],
         "execution_layer": "TWAK CLI",
@@ -2717,6 +2786,12 @@ def portfolio():
         "chain": "bsc",
         "network": "BNB Smart Chain / BSC",
         "wallet_baseline": load_wallet_baseline(),
+        "wallet_summary": {
+            "total_wallet_value_usd": round(total_wallet_value, 8),
+            "trading_value_usd": round(trading_value, 8),
+            "gas_reserve_value_usd": round(gas_reserve_value, 8),
+            "gas_reserve_symbols": sorted(GAS_RESERVE_SYMBOLS),
+        },
         "result": result,
         "event": event,
     }
