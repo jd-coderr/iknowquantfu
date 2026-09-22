@@ -17,13 +17,14 @@ const MANUAL_STRATEGY_OPTIONS = [
   "SMC Sequence Continuation",
   "Stochastic Quad Rotation",
   "TDI Sharkfin Reversal",
+  "IKQF TDI Bottom-to-Top Reversal",
   "FVG Channel",
   "Ichimoku MACD EMA Confluence",
 ];
 
 const AUTO_STRATEGY_LABEL = "AUTO / IKQF v2 Opportunity Engine";
 
-const TIMEFRAME_OPTIONS = ["5M", "15M", "1H", "4H", "1D"];
+const TIMEFRAME_OPTIONS = ["1M", "5M", "15M", "1H", "4H", "1D"];
 
 const RISK_OPTIONS = [
   { value: "low", label: "CONSERVATIVE" },
@@ -95,8 +96,8 @@ function App() {
   const [walletAddress, setWalletAddress] = useState(null);
   const [walletChainId, setWalletChainId] = useState(null);
   const [bnbBalance, setBnbBalance] = useState(null);
-  const [twakStatus, setTwakStatus] = useState("CONFIGURED");
-  const [twakRegistration, setTwakRegistration] = useState("READY");
+  const [twakStatus, setTwakStatus] = useState("UNKNOWN");
+  const [twakRegistration, setTwakRegistration] = useState("UNKNOWN");
   const [twakAgentAddress, setTwakAgentAddress] = useState(null);
   const [twakAgentChain, setTwakAgentChain] = useState("bsc");
   const [viewMode, setViewMode] = useState("simple");
@@ -1430,7 +1431,7 @@ function App() {
     const mode = String(getCurrentExecutionMode() || "decision_simulation").toLowerCase();
 
     if (mode === "paper_trading") return "PAPER TRADING ENGINE";
-    if (mode === "live_trading") return "TWAK → PANCAKESWAP";
+    if (mode === "live_trading") return "TWAK → BNB SMART CHAIN";
 
     return "DECISION SIMULATION";
   }
@@ -1791,7 +1792,7 @@ async function startAutonomousMode() {
     }
     setAutonomousMode(true);
     setAgentStopConfirmed(false);
-    await loadPortfolio();
+    await loadPortfolio(data?.wallet_baseline || null);
     return true;
   } catch (err) {
     console.error(err);
@@ -1885,13 +1886,21 @@ useEffect(() => {
     window.localStorage.removeItem("ikqf_starting_portfolio_timestamp");
   }
 
-  loadAutonomousStatus();
-  checkRegistration();
-  loadWalletBaseline();
-  loadPortfolio();
-  loadTradeHistory();
-  loadPaperPortfolio();
-  
+  async function bootstrapLiveState() {
+    loadAutonomousStatus();
+    checkRegistration();
+
+    // Load the authoritative backend baseline first, then calculate portfolio
+    // change from that exact snapshot. This avoids a first-render race where
+    // loadPortfolio could calculate against an older React state value.
+    const baseline = await loadWalletBaseline();
+    await loadPortfolio(baseline);
+    loadTradeHistory();
+    loadPaperPortfolio();
+  }
+
+  bootstrapLiveState();
+
   const timer = setInterval(() => {
     loadAutonomousStatus();
   }, 10000);
@@ -2674,9 +2683,9 @@ Best eligible risk-adjusted score among all tested combinations.
 
       const data = await response.json();
 
-      setTwakStatus("CONFIGURED");
-      setTwakRegistration(data.registration);
-      setTwakAgentAddress(data.agent_address);
+      setTwakStatus(data?.success ? "VERIFIED" : "NOT READY");
+      setTwakRegistration(data.registration || "not_ready");
+      setTwakAgentAddress(data.agent_address || null);
       setTwakAgentChain(data.chain || "bsc");
     } catch (error) {
       alert("REGISTRATION CHECK FAILED");
@@ -2877,11 +2886,11 @@ async function runAgentCycle() {
   }
 }
 
-  async function loadPortfolio() {
+  async function loadPortfolio(baselineOverride = null) {
     setPortfolioLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE}/portfolio`);
+      const response = await fetch(`${API_BASE}/portfolio`, { cache: "no-store" });
       const data = await response.json();
 
       if (data?.agent_address) {
@@ -2915,9 +2924,11 @@ async function runAgentCycle() {
         0
       );
 
-const baseline = data?.wallet_baseline || walletBaseline || null;
+const baseline = baselineOverride || data?.wallet_baseline || walletBaseline || null;
 
-if (data?.wallet_baseline) {
+if (baselineOverride) {
+  setWalletBaseline(baselineOverride);
+} else if (data?.wallet_baseline) {
   setWalletBaseline(data.wallet_baseline);
 }
 
@@ -2996,18 +3007,23 @@ async function resetPnlBaseline() {
     const response = await fetch(`${API_BASE}/wallet-baseline/reset`, {
       method: "POST",
       headers: getOperatorHeaders(),
+      cache: "no-store",
     });
 
     if (await handleLockedResponse(response)) return;
 
     const data = await response.json();
     if (!response.ok || data?.success === false || !data?.wallet_baseline) {
-      throw new Error(data?.message || "Baseline reset failed.");
+      throw new Error(data?.message || data?.detail || "Baseline reset failed.");
     }
 
-    setWalletBaseline(data.wallet_baseline);
-    await loadPortfolio();
-    alert("START WALLET BASELINE RESET TO CURRENT LIVE WALLET");
+    // React state updates are asynchronous. Pass the new baseline directly into
+    // loadPortfolio so the PnL cannot be recalculated against the stale snapshot
+    // from the render that existed before this button click.
+    const freshBaseline = data.wallet_baseline;
+    setWalletBaseline(freshBaseline);
+    await loadPortfolio(freshBaseline);
+    alert(`START WALLET BASELINE RESET\n${formatPortfolioBaselineDateOnly(freshBaseline.captured_at)}\n${formatMoney(freshBaseline.total_value_usd)}`);
   } catch (err) {
     console.error(err);
     alert(`PORTFOLIO BASELINE RESET FAILED: ${err?.message || err}`);
@@ -3016,11 +3032,19 @@ async function resetPnlBaseline() {
 
 async function loadWalletBaseline() {
   try {
-    const response = await fetch(`${API_BASE}/wallet-baseline`);
+    const response = await fetch(`${API_BASE}/wallet-baseline`, { cache: "no-store" });
     const data = await response.json();
-    setWalletBaseline(data?.wallet_baseline || null);
+
+    if (!response.ok || data?.success === false) {
+      throw new Error(data?.message || data?.detail || "Wallet baseline load failed.");
+    }
+
+    const baseline = data?.wallet_baseline || null;
+    setWalletBaseline(baseline);
+    return baseline;
   } catch (err) {
     console.error("WALLET BASELINE LOAD FAILED:", err);
+    return null;
   }
 }
 
@@ -3297,7 +3321,7 @@ async function loadTradeHistory() {
               <div className="simple-message-box">
                 <strong>POWERED BY</strong>
                 <p>
-                  CoinMarketCap market intelligence → Trust Wallet Agent Kit → PancakeSwap execution routing → BNB Smart Chain infrastructure.
+                  CoinMarketCap market intelligence → Trust Wallet Agent Kit → route-selected swap execution → BNB Smart Chain infrastructure.
                 </p>
               </div>
             </div>
@@ -3559,7 +3583,7 @@ async function loadTradeHistory() {
               <div className="simple-message-box">
                 <strong>POWERED BY</strong>
                 <p>
-                  CoinMarketCap market intelligence → Trust Wallet Agent Kit → PancakeSwap execution routing → BNB Smart Chain infrastructure.
+                  CoinMarketCap market intelligence → Trust Wallet Agent Kit → route-selected swap execution → BNB Smart Chain infrastructure.
                 </p>
               </div>
             </div>
@@ -4235,7 +4259,7 @@ async function loadTradeHistory() {
                   <div className="metrics">
                     <p>DATA SOURCE......... CoinMarketCap Agent Hub</p>
                     <p>EXECUTION LAYER..... Trust Wallet Agent Kit</p>
-                    <p>ROUTING VENUE....... PancakeSwap</p>
+                    <p>ROUTING VENUE....... Selected by TWAK</p>
                     <br />
                     <p>MARKET REGIME....... {getMarketRegime()}</p>
                     <p>STRATEGY MODE....... AUTO-SELECT BEST BACKTESTED STRATEGY</p>
@@ -4247,7 +4271,7 @@ async function loadTradeHistory() {
                     <p>TRADE PLAN.......... {agentResult?.trade_plan ? "GENERATED" : "NONE"}</p>
                     <p>ACTION TAKEN........ {agentResult?.execution_result ? "EXECUTION ATTEMPTED" : "NONE"}</p>
                     <br />
-                    <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → PANCAKESWAP → BNB SMART CHAIN</p>
+                    <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → ROUTE-SELECTED SWAP → BNB SMART CHAIN</p>
                     <p>RULE ADHERENCE...... USER RISK LIMITS ENFORCED</p>
             <p>TERMINAL COMMENT.... {getFullTerminalComment()}</p>
                           </div>
@@ -4475,7 +4499,7 @@ async function loadTradeHistory() {
                     <p><strong>EXECUTION MODES</strong></p>
                     <p>Decision Simulation: the agent generates and logs decisions only. No live trade and no virtual position is opened.</p>
                     <p>Paper Trading: the agent opens and closes virtual positions, tracks paper profit/loss, and can be reset without touching the live wallet.</p>
-                    <p>Live Trading: the agent attempts real TWAK execution, routes swaps through PancakeSwap, and settles transactions on BNB Smart Chain.</p>
+                    <p>Live Trading: the agent attempts real TWAK execution, submits swaps through TWAK and settles transactions on BNB Smart Chain.</p>
                     <br />
                     <p><strong>AGENT DECISION HIERARCHY</strong></p>
                     <p>1. Risk Protection: drawdown limits, portfolio safety, daily loss control.</p>
@@ -4562,7 +4586,7 @@ async function loadTradeHistory() {
         </section>
 
         <div className="footer retro-footer">
-          CMC AGENT HUB: OK &nbsp;&nbsp; TWAK: OK &nbsp;&nbsp; PANCAKESWAP: OK &nbsp;&nbsp; BNB CHAIN: OK &nbsp;&nbsp; BACKTEST ENGINE: OK &nbsp;&nbsp; OPTIMIZER: OK
+          CMC AGENT HUB: ACTIVE &nbsp;&nbsp; TWAK: CHECK STATUS &nbsp;&nbsp; ROUTER: TWAK SELECTED &nbsp;&nbsp; BNB CHAIN &nbsp;&nbsp; BACKTEST ENGINE &nbsp;&nbsp; OPTIMIZER
         </div>
       </div>
     </div>
@@ -5082,7 +5106,7 @@ async function loadTradeHistory() {
           <div className="metrics">
             <p>DATA SOURCE......... CoinMarketCap Agent Hub</p>
             <p>EXECUTION LAYER..... Trust Wallet Agent Kit</p>
-            <p>ROUTING VENUE....... PancakeSwap</p>
+            <p>ROUTING VENUE....... Selected by TWAK</p>
 
             <br />
 
@@ -5098,7 +5122,7 @@ async function loadTradeHistory() {
 
             <br />
 
-            <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → PANCAKESWAP → BNB SMART CHAIN</p>
+            <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → ROUTE-SELECTED SWAP → BNB SMART CHAIN</p>
             <p>RULE ADHERENCE...... USER RISK LIMITS ENFORCED</p>
             <p>TERMINAL COMMENT.... {getFullTerminalComment()}</p>
           </div>
@@ -5556,7 +5580,7 @@ const isRealTrade = tradeTypeLabel === "REAL TRADE / EXECUTION";
               <p><strong>EXECUTION MODES</strong></p>
               <p>Decision Simulation: the agent generates and logs decisions only. No live trade and no virtual position is opened.</p>
               <p>Paper Trading: the agent opens and closes virtual positions, tracks paper profit/loss, and can be reset without touching the live wallet.</p>
-              <p>Live Trading: the agent attempts real TWAK execution, routes swaps through PancakeSwap, and settles transactions on BNB Smart Chain.</p>
+              <p>Live Trading: the agent attempts real TWAK execution, submits swaps through TWAK and settles transactions on BNB Smart Chain.</p>
 
               <br />
 
@@ -5599,7 +5623,7 @@ const isRealTrade = tradeTypeLabel === "REAL TRADE / EXECUTION";
 
 
       <div className="footer">
-        SYSTEM HEALTH // CMC AGENT HUB: OK // TWAK: OK // PANCAKESWAP: OK // BNB CHAIN: OK // BACKTEST ENGINE: OK // OPTIMIZER: OK
+        SYSTEM HEALTH // CMC AGENT HUB // TWAK STATUS REQUIRED // ROUTER: TWAK SELECTED // BNB CHAIN // BACKTEST ENGINE // OPTIMIZER
       </div>
       </main>
     </div>
