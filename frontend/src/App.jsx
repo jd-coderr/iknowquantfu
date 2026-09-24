@@ -4118,6 +4118,9 @@ async function loadTradeHistory() {
                           <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TYPE: {tradeTypeLabel}</p>
                           <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>{timestamp}</p>
                           <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>EVENT: {getTradeLogEventLabel(trade)}</p>
+                          {trade.error && (
+                            <p style={{ color: "#ff9b9b" }}>ERROR: {String(trade.error)}</p>
+                          )}
                           <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>
                             STRATEGY: {trade.selected_strategy || trade.active_strategy || trade.strategy || trade.trade_plan?.selected_strategy || trade.trade_plan?.strategy || "N/A"}
                           </p>
