@@ -413,6 +413,7 @@ function App() {
       timeframe: item.timeframe || timeframe,
       risk: item.risk || risk,
       selected_strategy: item.selected_strategy,
+      strategy_only_mode: true,
       result_snapshot: overrideResult,
       optimization: overrideResult?.optimization || result?.optimization || null,
       source: "optimizer_table_override",
@@ -540,6 +541,7 @@ function App() {
         timeframe: optimizerPick?.timeframe || timeframe,
         risk: optimizerPick?.risk || risk,
         selected_strategy: optimizerPick?.selected_strategy || result?.selected_strategy || null,
+        strategy_only_mode: false,
         result_snapshot: optimizerResult || null,
         optimization: optimizerResult?.optimization || result?.optimization || null,
         source: hasOptimizerPick ? "auto_optimization" : "manual_selection",
@@ -574,6 +576,7 @@ function App() {
       timeframe: overrideSetup?.timeframe || timeframe,
       risk: overrideSetup?.risk || risk,
       selected_strategy: selectedStrategy,
+      strategy_only_mode: !isAutoStrategyLabel(selectedStrategy),
       result_snapshot: overrideResult || null,
       optimization: overrideResult?.optimization || result?.optimization || null,
       source,
@@ -625,6 +628,7 @@ function App() {
         timeframe,
         risk,
         selected_strategy: AUTO_STRATEGY_LABEL,
+        strategy_only_mode: false,
         result_snapshot: null,
         optimization: result?.optimization || null,
         source: "v2_auto_mode",
@@ -659,6 +663,7 @@ function App() {
       timeframe: nextTimeframe,
       risk: nextRisk,
       selected_strategy: nextStrategy,
+      strategy_only_mode: true,
       result_snapshot: overrideResult,
       optimization: overrideResult?.optimization || result?.optimization || null,
       source: "manual_strategy_override",
@@ -696,6 +701,7 @@ function App() {
       timeframe: optimizerPick?.timeframe || timeframe,
       risk: optimizerPick?.risk || risk,
       selected_strategy: hasOptimizerPick ? optimizerPick?.selected_strategy : null,
+      strategy_only_mode: false,
       result_snapshot: hasOptimizerPick ? optimizerResult : null,
       optimization: optimizerResult?.optimization || result?.optimization || null,
       source: hasOptimizerPick ? "auto_optimization" : "manual_selection",
@@ -719,6 +725,13 @@ function App() {
     return "AUTO-OPTIMIZER PICK";
   }
 
+  function getStrategySourceLabel() {
+    if (isManualOverrideActive()) return "MANUAL OVERRIDE — LOCKED";
+    if (strategyControlMode === "v2" || isAutoStrategyLabel(manualStrategy)) return "IKQF v2 AUTO";
+    if (autoOptimized || setupSource === "auto_optimization" || setupSource === "auto_optimized_start") return "AUTO-OPTIMIZER";
+    return "STANDARD / UNLOCKED";
+  }
+
   function renderManualOverridePanel() {
     const manualActive = isManualOverrideActive();
     const v2Active = strategyControlMode === "v2" || isAutoStrategyLabel(manualStrategy);
@@ -726,7 +739,7 @@ function App() {
     return (
       <div className={`manual-override-panel ${(manualActive || v2Active) ? "manual-override-active" : ""}`}>
         <div className="manual-override-header">
-          <span>MANUAL STRATEGY OVERRIDE</span>
+          <span>{manualActive ? "MANUAL OVERRIDE — ACTIVE / LOCKED" : "MANUAL STRATEGY OVERRIDE"}</span>
           {(manualActive || v2Active) && (
             <button
               type="button"
@@ -807,7 +820,9 @@ function App() {
         </div>
 
         <div className="manual-override-status">
-          ACTIVE SOURCE........ {getStrategyControlStatusLabel()}
+          <div>ACTIVE SOURCE........ {getStrategyControlStatusLabel()}</div>
+          <div>STRATEGY LOCK........ {manualActive ? "ON — AUTO/V2 SELECTION BYPASSED" : "OFF"}</div>
+          {manualActive && <div>MANUAL MODE.......... THIS EXACT STRATEGY / TIMEFRAME / RISK WILL BE USED</div>}
         </div>
 
         <div className="manual-override-actions">
@@ -817,7 +832,13 @@ function App() {
             disabled={isAgentSetupLocked()}
             onClick={handleApplyStrategyControlMode}
           >
-            {strategyControlMode === "manual" ? "> APPLY MANUAL OVERRIDE <" : strategyControlMode === "v2" ? "> APPLY IKQF v2 AUTO <" : "> USE AUTO-OPTIMIZER PICK <"}
+            {manualActive
+              ? "> MANUAL OVERRIDE ACTIVE <"
+              : strategyControlMode === "manual"
+                ? "> APPLY MANUAL OVERRIDE <"
+                : strategyControlMode === "v2"
+                  ? "> APPLY IKQF v2 AUTO <"
+                  : "> USE AUTO-OPTIMIZER PICK <"}
           </button>
           <button
             type="button"
@@ -1658,6 +1679,9 @@ function App() {
       trade_size: patch.trade_size !== undefined ? patch.trade_size : tradeSize,
       interval_minutes: patch.interval_minutes !== undefined ? patch.interval_minutes : autonomousInterval,
       selected_strategy: patch.selected_strategy !== undefined ? patch.selected_strategy : manualStrategy || snapshot?.selected_strategy || null,
+      strategy_only_mode: patch.strategy_only_mode !== undefined
+        ? Boolean(patch.strategy_only_mode)
+        : isManualOverrideActive(),
       result_snapshot: snapshot,
       optimization: optimizationSnapshot,
       source: patch.source || "manual_selection",
@@ -1763,6 +1787,7 @@ async function startAutonomousMode() {
         execution_mode: selectedExecutionMode,
         trade_size: tradeSize,
         selected_strategy: selectedStrategyForPayload,
+        strategy_only_mode: isManualOverrideActive(),
         interval_minutes: Number(autonomousInterval),
         result_snapshot: result || null,
         optimization: result?.optimization || null,
@@ -3664,6 +3689,7 @@ async function loadTradeHistory() {
                 <p>ACTIVE TIMEFRAME.... {getActiveTimeframeLabel()}</p>
                 <p>LAST DECISION....... {getExecutionAction()}</p>
                 <p>ACTIVE STRATEGY..... {getActiveStrategyLabel()}</p>
+                <p>STRATEGY SOURCE..... {getStrategySourceLabel()}</p>
                 <p>STRATEGY RATING..... {result ? `${getOverallRating()} — ${getRatingExplanation()}` : "WAITING"}</p>
                 <p>BACKTEST RETURN..... {result?.backtest?.net_return || "WAITING"}</p>
                 <p>MAX DRAWDOWN........ {result?.backtest?.max_drawdown || "WAITING"}</p>
@@ -3707,6 +3733,7 @@ async function loadTradeHistory() {
               <div className="metrics strategy-library-box">
                 <p>AGENT STATUS....... {getAgentRuntimeStatusLabel()}</p>
                 <p>ACTIVE STRATEGY.... {getActiveStrategyLabel()}</p>
+                    <p>STRATEGY SOURCE.... {getStrategySourceLabel()}</p>
                 <p>BROWSER WALLET....... {walletAddress ? `CONNECTED: ${shortenAddress(walletAddress)}` : "NOT CONNECTED"}</p>
                 <p>BROWSER NETWORK.... {getUserNetworkLabel()}</p>
                 <p>AGENT NETWORK...... {getAgentNetworkLabel()}</p>
@@ -4039,6 +4066,7 @@ async function loadTradeHistory() {
                     <p><strong>EXECUTION STATUS</strong></p>
                     <p>MODE................ {getExecutionModeLabel()}</p>
                     <p>ACTIVE STRATEGY.... {getActiveStrategyLabel()}</p>
+                    <p>STRATEGY SOURCE.... {getStrategySourceLabel()}</p>
                     <p>ACTIVE TIMEFRAME... {getActiveTimeframeLabel()}</p>
                     <p>TRADE EXECUTED...... {executionStatus.executed}</p>
                     <p>STATUS.............. {executionStatus.status}</p>
@@ -4906,6 +4934,7 @@ async function loadTradeHistory() {
       <p><strong>EXECUTION STATUS</strong></p>
       <p>MODE................ {getExecutionModeLabel()}</p>
       <p>ACTIVE STRATEGY.... {getActiveStrategyLabel()}</p>
+                    <p>STRATEGY SOURCE.... {getStrategySourceLabel()}</p>
       <p>TRADE EXECUTED...... {executionStatus.executed}</p>
       <p>STATUS.............. {executionStatus.status}</p>
       <p>REASON.............. {executionStatus.reason}</p>
@@ -4965,6 +4994,7 @@ async function loadTradeHistory() {
 <div className="metrics strategy-library-box">
   <p>AGENT STATUS....... {getAgentRuntimeStatusLabel()}</p>
   <p>ACTIVE STRATEGY.... {getActiveStrategyLabel()}</p>
+                    <p>STRATEGY SOURCE.... {getStrategySourceLabel()}</p>
   <p>ACTIVE TIMEFRAME... {getActiveTimeframeLabel()}</p>
   <p>BROWSER WALLET...... {walletAddress ? "CONNECTED" : "NOT CONNECTED"}</p>
   <p>BROWSER NETWORK.... {getUserNetworkLabel()}</p>
