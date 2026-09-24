@@ -725,6 +725,20 @@ function App() {
     return "AUTO-OPTIMIZER PICK";
   }
 
+  function getTradeConfidenceLabel() {
+    if (isManualOverrideActive() || agentResult?.strategy_only_mode === true) {
+      return "BYPASSED — STRATEGY SIGNAL ONLY";
+    }
+
+    return agentResult?.confidence_score !== undefined && agentResult?.confidence_score !== null
+      ? `${agentResult.confidence_score} / 100`
+      : "WAITING";
+  }
+
+  function isManualStrategyOnlyRuntime() {
+    return isManualOverrideActive() || agentResult?.strategy_only_mode === true;
+  }
+
   function getStrategySourceLabel() {
     if (isManualOverrideActive()) return "MANUAL OVERRIDE — LOCKED";
     if (strategyControlMode === "v2" || isAutoStrategyLabel(manualStrategy)) return "IKQF v2 AUTO";
@@ -3361,7 +3375,9 @@ async function loadTradeHistory() {
     const latestRealTrade = getLatestLiveTradeLogEntry();
     const selectedStrategy = getSimpleSelectedStrategyLabel();
     const marketRegime = getSimpleMarketRegimeLabel();
-    const confidenceLabel = agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score} / 100` : "not scored yet";
+    const confidenceLabel = isManualStrategyOnlyRuntime()
+      ? "STRATEGY SIGNAL ONLY"
+      : (agentResult?.confidence_score !== undefined && agentResult?.confidence_score !== null ? `${agentResult.confidence_score} / 100` : "not scored yet");
     const riskStatus = agentResult?.risk_control?.status || "not checked yet";
     const portfolioValue = formatMoney(portfolio?.totalUsdValue || paperPortfolio?.total_value_usdt || 0);
     const executionSource = getExecutionSourceLabel();
@@ -3802,7 +3818,7 @@ async function loadTradeHistory() {
                 <p>ACTIVE TIMEFRAME... {getActiveTimeframeLabel()}</p>
                 <p>SIGNAL ASSET........ {getSignalAssetLabel()}</p>
                 <p>TRADE SIZE.......... {tradeSize} {getSignalAssetLabel()} TARGET</p>
-                <p>TRADE CONFIDENCE..... {agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score} / 100` : "WAITING"}</p>
+                <p>TRADE CONFIDENCE..... {getTradeConfidenceLabel()}</p>
                 {renderV2OpportunityPanel(true)}
                 <p>DRAWDOWN............. {agentResult?.risk_control?.current_drawdown_pct !== undefined ? `${agentResult.risk_control.current_drawdown_pct}%` : "WAITING"}</p>
                 <p>RISK STATUS.......... {agentResult?.risk_control?.status || "WAITING"}</p>
@@ -4212,7 +4228,9 @@ async function loadTradeHistory() {
                             STRATEGY: {trade.selected_strategy || trade.active_strategy || trade.strategy || trade.trade_plan?.selected_strategy || trade.trade_plan?.strategy || "N/A"}
                           </p>
                           <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TIMEFRAME: {trade.timeframe || trade.trade_plan?.timeframe || trade.active_config?.timeframe || getActiveTimeframeLabel()}</p>
-                          {trade.confidence_score !== undefined && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TRADE CONFIDENCE: {trade.confidence_score} / 100</p>}
+                          {trade.strategy_only_mode === true
+                            ? <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TRADE CONFIDENCE: BYPASSED — MANUAL STRATEGY ONLY</p>
+                            : (trade.confidence_score !== undefined && trade.confidence_score !== null && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TRADE CONFIDENCE: {trade.confidence_score} / 100</p>)}
                           {trade.risk_control?.current_drawdown_pct !== undefined && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>DRAWDOWN: {trade.risk_control.current_drawdown_pct}% / LIMIT {trade.risk_control.max_drawdown_limit_pct}%</p>}
                           {trade.why?.length > 0 && (
                             <div style={{ color: isRealTrade ? "#9cff8f" : "#808080", marginTop: "8px" }}>
@@ -4270,7 +4288,7 @@ async function loadTradeHistory() {
               </details>
             )}
 
-            {agentResult?.confidence_score !== undefined && (
+            {!isManualStrategyOnlyRuntime() && agentResult?.confidence_score !== undefined && agentResult?.confidence_score !== null && (
               <details className="retro-window" open>
                 <summary>TRADE CONFIDENCE / WHY</summary>
                 <div className="metrics strategy-library-box">
@@ -4366,22 +4384,22 @@ async function loadTradeHistory() {
                 <details className="retro-sub-window">
                   <summary>AGENT DECISION ENGINE</summary>
                   <div className="metrics">
-                    <p>DATA SOURCE......... CoinMarketCap Agent Hub</p>
+                    <p>DATA SOURCE......... {isManualStrategyOnlyRuntime() ? "SELECTED STRATEGY FILE + MARKET CANDLES" : "CoinMarketCap Agent Hub"}</p>
                     <p>EXECUTION LAYER..... Trust Wallet Agent Kit</p>
                     <p>ROUTING VENUE....... Selected by TWAK</p>
                     <br />
-                    <p>MARKET REGIME....... {getMarketRegime()}</p>
-                    <p>STRATEGY MODE....... AUTO-SELECT BEST BACKTESTED STRATEGY</p>
+                    <p>MARKET REGIME....... {isManualStrategyOnlyRuntime() ? "BYPASSED — MANUAL OVERRIDE" : getMarketRegime()}</p>
+                    <p>STRATEGY MODE....... {isManualStrategyOnlyRuntime() ? "MANUAL OVERRIDE — STRATEGY SIGNAL ONLY" : "AUTO-SELECT BEST BACKTESTED STRATEGY"}</p>
                     <p>SELECTED STRATEGY... {result.selected_strategy}</p>
                     <p>OPTIMIZER PROFILE... {getRiskProfileLabel(result.risk)}</p>
                     <p>LAST DECISION....... {getAgentDecision()}</p>
-                    <p>TRADE CONFIDENCE..... {agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score} / 100` : "WAITING"}</p>
+                    <p>TRADE CONFIDENCE..... {getTradeConfidenceLabel()}</p>
                     <p>RISK STATUS.......... {agentResult?.risk_control?.status || "WAITING"}</p>
                     <p>TRADE PLAN.......... {agentResult?.trade_plan ? "GENERATED" : "NONE"}</p>
                     <p>ACTION TAKEN........ {agentResult?.execution_result ? "EXECUTION ATTEMPTED" : "NONE"}</p>
                     <br />
-                    <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → ROUTE-SELECTED SWAP → BNB SMART CHAIN</p>
-                    <p>RULE ADHERENCE...... USER RISK LIMITS ENFORCED</p>
+                    <p>AGENT FLOW.......... {isManualStrategyOnlyRuntime() ? "STRATEGY FILE → CLOSED-CANDLE SIGNAL → HARD SAFETY → TWAK → ROUTE-SELECTED SWAP → BNB SMART CHAIN" : "COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → ROUTE-SELECTED SWAP → BNB SMART CHAIN"}</p>
+                    <p>RULE ADHERENCE...... {isManualStrategyOnlyRuntime() ? "AUTO / V2 / CMC CONFIDENCE GATES BYPASSED — HARD SAFETY ONLY" : "USER RISK LIMITS ENFORCED"}</p>
             <p>TERMINAL COMMENT.... {getFullTerminalComment()}</p>
                           </div>
                 </details>
@@ -5080,7 +5098,7 @@ async function loadTradeHistory() {
   <p>ACTIVE TIMEFRAME... {getActiveTimeframeLabel()}</p>
   <p>SIGNAL ASSET........ {getSignalAssetLabel()}</p>
   <p>TRADE SIZE.......... {tradeSize} {getSignalAssetLabel()} TARGET</p>
-  <p>TRADE CONFIDENCE..... {agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score} / 100` : "WAITING"}</p>
+  <p>TRADE CONFIDENCE..... {getTradeConfidenceLabel()}</p>
   <p>DRAWDOWN............. {agentResult?.risk_control?.current_drawdown_pct !== undefined ? `${agentResult.risk_control.current_drawdown_pct}%` : "WAITING"}</p>
   <p>RISK STATUS.......... {agentResult?.risk_control?.status || "WAITING"}</p>
   <p>PAPER VALUE.......... {paperPortfolio ? formatMoney(paperPortfolio.total_value_usdt) : "N/A"}</p>
@@ -5099,7 +5117,7 @@ async function loadTradeHistory() {
 </div>
 </div>
 
-{agentResult?.confidence_score !== undefined && (
+{!isManualStrategyOnlyRuntime() && agentResult?.confidence_score !== undefined && agentResult?.confidence_score !== null && (
   <div className="metrics strategy-library-box" style={{ marginTop: "24px" }}>
     <p><strong>{getTradePlan()?.to_token === "BNB" || getTradePlan()?.from_token === "BNB" ? "BNB EXECUTION CONFIDENCE" : `${coin} TRADE CONFIDENCE`}</strong></p>
     <p>OVERALL CONFIDENCE.... {agentResult.confidence_score} / 100</p>
@@ -5125,6 +5143,19 @@ async function loadTradeHistory() {
         : "HIGH CONVICTION"}
     </p>
     <p>SCALE................ 0 = NO CONFIDENCE / 100 = MAX CONFIDENCE</p>
+  </div>
+)}
+
+{isManualStrategyOnlyRuntime() && agentResult && (
+  <div className="metrics strategy-library-box" style={{ marginTop: "24px", borderColor: "#ff3333", boxShadow: "0 0 18px rgba(255, 0, 0, 0.35)" }}>
+    <p><strong>MANUAL OVERRIDE — STRATEGY-ONLY EXECUTION</strong></p>
+    <p>SIGNAL AUTHORITY..... {getActiveStrategyLabel()}</p>
+    <p>STRATEGY SIGNAL...... {String(agentResult?.backtest?.current_signal?.status || "HOLD").toUpperCase()}</p>
+    <p>CMC / FEAR & GREED... BYPASSED</p>
+    <p>IKQF v2 / OPTIMIZER.. BYPASSED</p>
+    <p>CONFIDENCE GATE...... BYPASSED</p>
+    <p>DAILY FORCED ENTRY... BYPASSED</p>
+    <p>HARD SAFETY.......... ACTIVE — WALLET / BALANCE / KILL SWITCH / TRADE LIMITS / MAX DRAWDOWN</p>
   </div>
 )}
 
@@ -5215,26 +5246,26 @@ async function loadTradeHistory() {
           <h2>AGENT DECISION ENGINE</h2>
 
           <div className="metrics">
-            <p>DATA SOURCE......... CoinMarketCap Agent Hub</p>
+            <p>DATA SOURCE......... {isManualStrategyOnlyRuntime() ? "SELECTED STRATEGY FILE + MARKET CANDLES" : "CoinMarketCap Agent Hub"}</p>
             <p>EXECUTION LAYER..... Trust Wallet Agent Kit</p>
             <p>ROUTING VENUE....... Selected by TWAK</p>
 
             <br />
 
-            <p>MARKET REGIME....... {getMarketRegime()}</p>
-            <p>STRATEGY MODE....... AUTO-SELECT BEST BACKTESTED STRATEGY</p>
+            <p>MARKET REGIME....... {isManualStrategyOnlyRuntime() ? "BYPASSED — MANUAL OVERRIDE" : getMarketRegime()}</p>
+            <p>STRATEGY MODE....... {isManualStrategyOnlyRuntime() ? "MANUAL OVERRIDE — STRATEGY SIGNAL ONLY" : "AUTO-SELECT BEST BACKTESTED STRATEGY"}</p>
             <p>SELECTED STRATEGY... {result.selected_strategy}</p>
             <p>OPTIMIZER PROFILE... {getRiskProfileLabel(result.risk)}</p>
             <p>LAST DECISION....... {getAgentDecision()}</p>
-            <p>TRADE CONFIDENCE..... {agentResult?.confidence_score !== undefined ? `${agentResult.confidence_score} / 100` : "WAITING"}</p>
+            <p>TRADE CONFIDENCE..... {getTradeConfidenceLabel()}</p>
             <p>RISK STATUS.......... {agentResult?.risk_control?.status || "WAITING"}</p>
             <p>TRADE PLAN.......... {agentResult?.trade_plan ? "GENERATED" : "NONE"}</p>
             <p>ACTION TAKEN........ {agentResult?.execution_result ? "EXECUTION ATTEMPTED" : "NONE"}</p>
 
             <br />
 
-            <p>AGENT FLOW.......... COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → ROUTE-SELECTED SWAP → BNB SMART CHAIN</p>
-            <p>RULE ADHERENCE...... USER RISK LIMITS ENFORCED</p>
+            <p>AGENT FLOW.......... {isManualStrategyOnlyRuntime() ? "STRATEGY FILE → CLOSED-CANDLE SIGNAL → HARD SAFETY → TWAK → ROUTE-SELECTED SWAP → BNB SMART CHAIN" : "COINMARKETCAP → MARKET ANALYSIS → STRATEGY ENGINE → CONFIDENCE MODEL → RISK GOVERNOR → TWAK → ROUTE-SELECTED SWAP → BNB SMART CHAIN"}</p>
+            <p>RULE ADHERENCE...... {isManualStrategyOnlyRuntime() ? "AUTO / V2 / CMC CONFIDENCE GATES BYPASSED — HARD SAFETY ONLY" : "USER RISK LIMITS ENFORCED"}</p>
             <p>TERMINAL COMMENT.... {getFullTerminalComment()}</p>
           </div>
 
