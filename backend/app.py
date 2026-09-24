@@ -882,7 +882,30 @@ def update_risk_state(portfolio_items, portfolio_available=True):
     return dict(RISK_STATE)
 
 
-def build_agent_analysis(cmc_signal, backtest, portfolio_items, decision, risk_control=None):
+def build_agent_analysis(cmc_signal, backtest, portfolio_items, decision, risk_control=None, strategy_only_mode=False, strategy=None):
+    if risk_control is None:
+        risk_control = update_risk_state(portfolio_items)
+
+    if strategy_only_mode:
+        current_signal = (backtest or {}).get("current_signal") or {}
+        signal_status = str(current_signal.get("status") or "HOLD").upper()
+        strategy_name = (strategy or {}).get("name") or "selected manual strategy"
+        return {
+            "confidence_score": None,
+            "confidence_mode": "MANUAL_STRATEGY_ONLY",
+            "signal_breakdown": {
+                "strategy_signal": signal_status,
+                "external_context_gates": "BYPASSED",
+            },
+            "why": [
+                f"MANUAL OVERRIDE: {strategy_name} is the sole trade-signal source.",
+                f"Current strategy signal: {signal_status}.",
+                "CMC bias, Fear & Greed, altcoin rotation, IKQF v2 confidence, and optimizer ranking are bypassed.",
+                "Only hard execution safety remains: wallet identity, available balance, kill switch, trade-safety limits, and max-drawdown protection.",
+            ],
+            "risk_control": risk_control,
+        }
+
     market_bias = str(cmc_signal.get("market_bias", "unknown")).lower()
     fear_greed = cmc_signal.get("fear_greed") or {}
     altcoin_season = cmc_signal.get("altcoin_season") or {}
@@ -951,9 +974,6 @@ def build_agent_analysis(cmc_signal, backtest, portfolio_items, decision, risk_c
     else:
         signal_breakdown["backtest_score"] = 0
         why.append("Backtest risk-adjusted score is poor.")
-
-    if risk_control is None:
-        risk_control = update_risk_state(portfolio_items)
 
     if risk_control["status"] == "SAFE":
         signal_breakdown["drawdown_safety"] = 15
@@ -1894,18 +1914,35 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
     original_requested_strategy = request.selected_strategy
     cmc_seed_coin = get_v2_seed_coin(request.coin, request.selected_strategy)
 
-    cmc_signal = get_cmc_signal(cmc_seed_coin)
-
-    x402_market_data = get_cmc_x402_quote(cmc_seed_coin)
-    cmc_signal["x402"] = x402_market_data
-
-    if x402_market_data.get("success") and x402_market_data.get("price_usd") is not None:
-        cmc_signal["price_usd"] = x402_market_data["price_usd"]
-        cmc_signal["x402_used_in_decision"] = True
-        cmc_signal["market_data_payment_layer"] = "CoinMarketCap x402 paid quote"
+    if strategy_only_mode:
+        # MANUAL OVERRIDE means the selected strategy file is the sole signal authority.
+        # Do not call CMC/x402 or let external context influence the decision path.
+        cmc_signal = {
+            "market_bias": "manual_override_bypassed",
+            "fear_greed": {"value": None, "label": "BYPASSED"},
+            "altcoin_season": {"value": None, "label": "BYPASSED"},
+            "x402_used_in_decision": False,
+            "market_data_payment_layer": "BYPASSED — MANUAL STRATEGY ONLY",
+            "manual_override": True,
+        }
+        x402_market_data = {
+            "success": False,
+            "bypassed": True,
+            "reason": "Manual Override active: CMC/x402 context is not used for trade decisions.",
+        }
     else:
-        cmc_signal["x402_used_in_decision"] = False
-        cmc_signal["market_data_payment_layer"] = "CMC API fallback; x402 not paid/available"
+        cmc_signal = get_cmc_signal(cmc_seed_coin)
+
+        x402_market_data = get_cmc_x402_quote(cmc_seed_coin)
+        cmc_signal["x402"] = x402_market_data
+
+        if x402_market_data.get("success") and x402_market_data.get("price_usd") is not None:
+            cmc_signal["price_usd"] = x402_market_data["price_usd"]
+            cmc_signal["x402_used_in_decision"] = True
+            cmc_signal["market_data_payment_layer"] = "CoinMarketCap x402 paid quote"
+        else:
+            cmc_signal["x402_used_in_decision"] = False
+            cmc_signal["market_data_payment_layer"] = "CMC API fallback; x402 not paid/available"
 
     v2_opportunity = None
     v2_trade_allowed = True
@@ -2035,6 +2072,13 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
             "event": event,
         }
 
+    if strategy_only_mode:
+        manual_current_signal = (backtest.get("current_signal") or {})
+        manual_price = safe_float(manual_current_signal.get("latest_close"), 0.0)
+        if manual_price > 0:
+            cmc_signal["price_usd"] = manual_price
+        cmc_signal["strategy_signal"] = str(manual_current_signal.get("status") or "HOLD").upper()
+
     market_bias = str(cmc_signal.get("market_bias", "unknown")).lower()
     risk_score = backtest.get("risk_adjusted_score", 0)
     target_token = normalize_trade_token(request.coin)
@@ -2093,22 +2137,26 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
     execution_result = None
     daily_qualification = get_daily_qualification_status()
 
-    # The daily qualification guard remains active even in strategy-only mode.
-    # Strategy-only controls normal entries/exits; it must not silently disable the
-    # one-live-trade-per-UTC-day competition safety net when that guard is enabled.
-    daily_guard_should_trade, daily_guard_reason = should_force_daily_qualification_trade(
-        live_execution_enabled=live_execution_enabled
-    )
+    # Manual Override is truly strategy-only: do not inject a new forced/daily
+    # qualification entry over the selected strategy. Existing forced positions
+    # may still be closed safely below if one was opened before manual mode.
+    if strategy_only_mode:
+        daily_guard_should_trade = False
+        daily_guard_reason = "MANUAL OVERRIDE: daily qualification entries are bypassed; only the selected strategy can open a new trade."
+    else:
+        daily_guard_should_trade, daily_guard_reason = should_force_daily_qualification_trade(
+            live_execution_enabled=live_execution_enabled
+        )
     forced_close_plan = maybe_build_forced_trade_close_plan(
         request,
         cmc_signal,
         live_execution_enabled=live_execution_enabled,
     )
 
-    if strategy_only_mode and not daily_guard_should_trade and forced_close_plan is None:
+    if strategy_only_mode and forced_close_plan is None:
         daily_guard_reason = (
-            f"STRATEGY ONLY MODE: normal trades follow {strategy['name']}. "
-            f"Daily qualification guard status: {daily_guard_reason}"
+            f"MANUAL OVERRIDE: {strategy['name']} is the only source allowed to open a new trade. "
+            "AUTO/V2/CMC confidence gates and daily qualification entries are bypassed."
         )
 
     if forced_close_plan is not None:
@@ -2348,6 +2396,8 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         portfolio_items=portfolio_items,
         decision=decision,
         risk_control=risk_control,
+        strategy_only_mode=strategy_only_mode,
+        strategy=strategy,
     )
 
     event = log_trade(
