@@ -11,7 +11,6 @@ import json
 import os
 import time
 from urllib.request import urlopen, Request
-from trade_safety import ALLOWED_TOKENS
 
 
 DEFAULT_SYMBOLS = [
@@ -24,6 +23,12 @@ DEFAULT_SYMBOLS = [
 STABLE_BASES = {"USDT", "USDC", "FDUSD", "TUSD", "DAI", "BUSD", "USD1", "EUR"}
 CACHE_TTL_SECONDS = int(os.getenv("IKQF_MARKET_SCAN_CACHE_SECONDS", "45"))
 _cache: dict[str, Any] = {"expires_at": 0, "data": []}
+
+BINANCE_TICKER_ENDPOINTS = [
+    "https://data-api.binance.vision/api/v3/ticker/24hr",
+    "https://api-gcp.binance.com/api/v3/ticker/24hr",
+    "https://api.binance.com/api/v3/ticker/24hr",
+]
 
 
 @dataclass
@@ -58,10 +63,19 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 
 def _fetch_binance_24h() -> list[dict[str, Any]]:
-    url = "https://api.binance.com/api/v3/ticker/24hr"
-    request = Request(url, headers={"User-Agent": "IKQF-v2-market-scanner/1.0"})
-    with urlopen(request, timeout=10) as response:
-        return json.loads(response.read().decode("utf-8"))
+    last_error = None
+    for url in BINANCE_TICKER_ENDPOINTS:
+        try:
+            request = Request(url, headers={"User-Agent": "IKQF-v2-market-scanner/1.0"})
+            with urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                if isinstance(payload, list):
+                    return payload
+                raise RuntimeError(f"Unexpected Binance ticker response from {url}")
+        except Exception as exc:
+            last_error = exc
+
+    raise RuntimeError(f"All Binance public market-data endpoints failed: {last_error}")
 
 
 def _candidate_from_ticker(row: dict[str, Any]) -> MarketCandidate | None:
@@ -70,7 +84,7 @@ def _candidate_from_ticker(row: dict[str, Any]) -> MarketCandidate | None:
         return None
 
     coin = symbol[:-4]
-    if not coin or coin in STABLE_BASES or coin not in ALLOWED_TOKENS:
+    if not coin or coin in STABLE_BASES:
         return None
 
     last_price = _safe_float(row.get("lastPrice"))
@@ -114,7 +128,7 @@ def _fallback_candidates() -> list[dict[str, Any]]:
             trade_count=0,
             source="fallback_watchlist",
         ).to_dict()
-        for s in DEFAULT_SYMBOLS if s[:-4] in ALLOWED_TOKENS
+        for s in DEFAULT_SYMBOLS
     ]
 
 

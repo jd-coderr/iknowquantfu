@@ -3,10 +3,15 @@ import pandas as pd
 
 
 BINANCE_KLINE_ENDPOINTS = [
+    # Official market-data-only host. Use this first because Railway/cloud IPs can
+    # receive HTTP 451 from the general Binance API hosts even for public candles.
+    "https://data-api.binance.vision/api/v3/klines",
+    "https://api-gcp.binance.com/api/v3/klines",
     "https://api.binance.com/api/v3/klines",
     "https://api1.binance.com/api/v3/klines",
     "https://api2.binance.com/api/v3/klines",
     "https://api3.binance.com/api/v3/klines",
+    "https://api4.binance.com/api/v3/klines",
 ]
 
 
