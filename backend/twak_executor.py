@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 from typing import Optional
 
 
@@ -64,27 +65,71 @@ def extract_portfolio_items(parsed):
     return []
 
 
-def get_cli_wallet_address(chain: str = "bsc", password: Optional[str] = None):
-    password = password or os.getenv("TWAK_WALLET_PASSWORD")
-    cmd = [*get_twak_base_command(), "wallet", "address", "--chain", chain, "--json"]
-    if password:
-        cmd.extend(["--password", password])
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
-    except Exception:
+# The signer wallet does not change during a running backend process.
+# Cache the verified CLI address so frontend status polling and each autonomous
+# cycle do not launch overlapping `twak wallet address` subprocesses against
+# the same wallet file. The cache resets naturally on deploy/restart.
+_CLI_WALLET_ADDRESS_CACHE = {}
+_CLI_WALLET_ADDRESS_LOCK = threading.Lock()
+
+
+def get_cli_wallet_address(chain: str = "bsc", password: Optional[str] = None, force_refresh: bool = False):
+    chain = str(chain or "bsc").strip().lower()
+
+    if not force_refresh:
+        cached = _CLI_WALLET_ADDRESS_CACHE.get(chain)
+        if cached:
+            return cached
+
+    # Only one thread may interrogate the CLI wallet at a time. Without this,
+    # the 10-second frontend status poll and the autonomous trading loop can
+    # launch concurrent TWAK CLI processes and make the live cycle stall/fail.
+    with _CLI_WALLET_ADDRESS_LOCK:
+        if not force_refresh:
+            cached = _CLI_WALLET_ADDRESS_CACHE.get(chain)
+            if cached:
+                return cached
+
+        password = password or os.getenv("TWAK_WALLET_PASSWORD")
+        cmd = [*get_twak_base_command(), "wallet", "address", "--chain", chain, "--json"]
+        if password:
+            cmd.extend(["--password", password])
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        except Exception:
+            return None
+
+        parsed = _extract_json(result.stdout)
+        candidates = []
+        if isinstance(parsed, dict):
+            candidates.extend([
+                parsed.get("address"),
+                (parsed.get("result") or {}).get("address")
+                if isinstance(parsed.get("result"), dict) else None,
+            ])
+        candidates.append(result.stdout)
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            match = re.search(r"0x[a-fA-F0-9]{40}", str(candidate))
+            if match:
+                address = clean_address(match.group(0))
+                if address:
+                    _CLI_WALLET_ADDRESS_CACHE[chain] = address
+                    return address
+
         return None
-    parsed = _extract_json(result.stdout)
-    candidates = []
-    if isinstance(parsed, dict):
-        candidates.extend([parsed.get("address"), (parsed.get("result") or {}).get("address") if isinstance(parsed.get("result"), dict) else None])
-    candidates.append(result.stdout)
-    for candidate in candidates:
-        if not candidate:
-            continue
-        match = re.search(r"0x[a-fA-F0-9]{40}", str(candidate))
-        if match:
-            return clean_address(match.group(0))
-    return None
+
+
+def clear_cli_wallet_address_cache(chain: Optional[str] = None):
+    """Clear the process-local signer cache; mainly useful for diagnostics/tests."""
+    with _CLI_WALLET_ADDRESS_LOCK:
+        if chain is None:
+            _CLI_WALLET_ADDRESS_CACHE.clear()
+        else:
+            _CLI_WALLET_ADDRESS_CACHE.pop(str(chain).strip().lower(), None)
 
 
 def run_twak_swap(amount: str, from_token: str, to_token: str, chain: str = "bsc", slippage: str = "1", quote_only: bool = True, password: Optional[str] = None):
