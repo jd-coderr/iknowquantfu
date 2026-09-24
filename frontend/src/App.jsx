@@ -737,7 +737,66 @@ function App() {
     const v2Active = strategyControlMode === "v2" || isAutoStrategyLabel(manualStrategy);
 
     return (
-      <div className={`manual-override-panel ${(manualActive || v2Active) ? "manual-override-active" : ""}`}>
+      <div className={`manual-override-panel ${(manualActive || v2Active) ? "manual-override-active" : ""} ${manualActive ? "manual-override-hot" : ""}`}>
+        {manualActive && (
+          <style>{`
+            .manual-override-panel.manual-override-hot {
+              border: 2px solid #ff2f2f !important;
+              background: linear-gradient(180deg, rgba(150, 0, 0, 0.76), rgba(70, 0, 0, 0.84)) !important;
+              box-shadow:
+                inset 0 0 34px rgba(255, 0, 0, 0.46),
+                inset 0 0 8px rgba(255, 255, 255, 0.10),
+                0 0 26px rgba(255, 35, 35, 0.82) !important;
+            }
+
+            .manual-override-panel.manual-override-hot .manual-override-header {
+              padding: 8px 10px;
+              margin: -2px -2px 10px;
+              border: 1px solid rgba(255, 120, 120, 0.95);
+              background: rgba(210, 0, 0, 0.48);
+              color: #ffffff !important;
+              text-shadow: 0 0 5px #ffffff, 0 0 12px #ff2f2f !important;
+              box-shadow: inset 0 0 14px rgba(255, 255, 255, 0.08), 0 0 12px rgba(255, 0, 0, 0.48);
+            }
+
+            .manual-override-panel.manual-override-hot .manual-override-help,
+            .manual-override-panel.manual-override-hot label {
+              color: #ffeaea !important;
+              text-shadow: 0 0 6px rgba(255, 90, 90, 0.95) !important;
+            }
+
+            .manual-override-panel.manual-override-hot select {
+              border: 1px solid #ff5a5a !important;
+              background: rgba(92, 0, 0, 0.94) !important;
+              color: #ffffff !important;
+              box-shadow: inset 0 0 12px rgba(255, 0, 0, 0.34), 0 0 9px rgba(255, 45, 45, 0.48) !important;
+            }
+
+            .manual-override-panel.manual-override-hot .manual-override-status {
+              border: 1px solid #ff5a5a !important;
+              background: rgba(105, 0, 0, 0.70) !important;
+              color: #ffffff !important;
+              box-shadow: inset 0 0 16px rgba(255, 0, 0, 0.30), 0 0 12px rgba(255, 45, 45, 0.42) !important;
+              text-shadow: 0 0 5px rgba(255, 110, 110, 0.95) !important;
+            }
+
+            .manual-override-panel.manual-override-hot .manual-override-apply {
+              border: 2px solid #ff6b6b !important;
+              background: rgba(220, 0, 0, 0.94) !important;
+              color: #ffffff !important;
+              box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.12), 0 0 22px rgba(255, 20, 20, 0.86) !important;
+              text-shadow: 0 0 5px #ffffff, 0 0 10px #ff2f2f !important;
+            }
+
+            .manual-override-panel.manual-override-hot .manual-override-clear,
+            .manual-override-panel.manual-override-hot .manual-override-x {
+              border-color: #ff5555 !important;
+              background: rgba(95, 0, 0, 0.88) !important;
+              color: #ffdede !important;
+              box-shadow: 0 0 10px rgba(255, 30, 30, 0.45) !important;
+            }
+          `}</style>
+        )}
         <div className="manual-override-header">
           <span>{manualActive ? "MANUAL OVERRIDE — ACTIVE / LOCKED" : "MANUAL STRATEGY OVERRIDE"}</span>
           {(manualActive || v2Active) && (
