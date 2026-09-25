@@ -97,22 +97,48 @@ def get_risk_settings(risk: str):
 
 
 def calculate_rsi(series, length=13):
-    """TradingView-style RSI for the original TDI script.
+    """Match Pine ``ta.rsi`` (Wilder/RMA) as closely as possible.
 
-    Pine uses ta.rsi(close, 13), which is Wilder/RMA based.
-    This keeps the backend TDI fastMA closer to the TradingView white-label signals.
+    Pine seeds Wilder's moving averages from the first ``length`` gains/losses,
+    then applies the recursive RMA formula. pandas ``ewm`` does not use the same
+    seed, which can move TDI fastMA across the fixed 32/68 sharkfin thresholds.
     """
+    series = pd.Series(series, copy=False).astype(float)
     delta = series.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
+    gain = delta.clip(lower=0.0)
+    loss = (-delta.clip(upper=0.0))
 
-    avg_gain = gain.ewm(alpha=1 / length, adjust=False, min_periods=length).mean()
-    avg_loss = loss.ewm(alpha=1 / length, adjust=False, min_periods=length).mean()
+    avg_gain = pd.Series(float("nan"), index=series.index, dtype=float)
+    avg_loss = pd.Series(float("nan"), index=series.index, dtype=float)
 
-    rs = avg_gain / avg_loss.where(avg_loss != 0)
-    rsi = 100 - (100 / (1 + rs))
+    if len(series) <= length:
+        return pd.Series(50.0, index=series.index, dtype=float)
 
-    return rsi.fillna(50)
+    seed_gain = gain.iloc[1:length + 1].mean()
+    seed_loss = loss.iloc[1:length + 1].mean()
+    avg_gain.iloc[length] = seed_gain
+    avg_loss.iloc[length] = seed_loss
+
+    for i in range(length + 1, len(series)):
+        avg_gain.iloc[i] = ((avg_gain.iloc[i - 1] * (length - 1)) + gain.iloc[i]) / length
+        avg_loss.iloc[i] = ((avg_loss.iloc[i - 1] * (length - 1)) + loss.iloc[i]) / length
+
+    rsi = pd.Series(float("nan"), index=series.index, dtype=float)
+    valid = avg_gain.notna() & avg_loss.notna()
+    both_zero = valid & (avg_gain == 0) & (avg_loss == 0)
+    only_loss_zero = valid & (avg_loss == 0) & (avg_gain > 0)
+    only_gain_zero = valid & (avg_gain == 0) & (avg_loss > 0)
+    normal = valid & ~(both_zero | only_loss_zero | only_gain_zero)
+
+    rsi.loc[both_zero] = 50.0
+    rsi.loc[only_loss_zero] = 100.0
+    rsi.loc[only_gain_zero] = 0.0
+    rs = avg_gain.loc[normal] / avg_loss.loc[normal]
+    rsi.loc[normal] = 100.0 - (100.0 / (1.0 + rs))
+
+    # The warm-up bars are never valid Pine signals. Keep them neutral instead
+    # of back-filling future RSI values into the past.
+    return rsi.fillna(50.0)
 
 
 def build_indicators(df):
@@ -299,7 +325,7 @@ def build_indicators(df):
     df["trend_bull_signal"] = trend_bull_signals
     df["trend_bear_signal"] = trend_bear_signals
 
-    df = df.bfill().ffill()
+    df = df.ffill()
 
     return df
 
@@ -719,10 +745,50 @@ def calculate_activity_profile(trades, backtest_start, backtest_end):
     }
 
 
+def get_recent_tdi_sharkfin_signals(df, hours=24):
+    """Return confirmed white TDI sharkfin labels over the recent window."""
+    if df is None or len(df) < 3:
+        return []
+
+    last_close = df.iloc[-1].get("close_time")
+    if pd.isna(last_close):
+        return []
+    cutoff = last_close - pd.Timedelta(hours=hours)
+    signals = []
+
+    for index in range(2, len(df)):
+        row = df.iloc[index]
+        close_time = row.get("close_time")
+        if pd.isna(close_time) or close_time < cutoff:
+            continue
+        state = get_tdi_sharkfin_state(df, index)
+        if not (state.get("white_buy") or state.get("white_sell")):
+            continue
+        signals.append({
+            "direction": "LONG" if state.get("white_buy") else "SHORT",
+            "trigger": state.get("trigger"),
+            "open_time": row.get("open_time").isoformat() if hasattr(row.get("open_time"), "isoformat") else str(row.get("open_time")),
+            "close_time": close_time.isoformat() if hasattr(close_time, "isoformat") else str(close_time),
+            "close": round(float(row.get("close")), 8),
+            "tdi_fast_prev_2": state.get("tdi_fast_prev_2"),
+            "tdi_fast_prev_1": state.get("tdi_fast_prev_1"),
+            "tdi_fast": state.get("tdi_fast"),
+        })
+
+    return signals
+
+
 def get_current_signal_summary(strategy_type, df, settings, strategy=None):
     last_index = len(df) - 1
     signal = get_signal(strategy_type, df, last_index, settings, strategy=strategy)
     row = df.iloc[last_index]
+    candle_open_time = row.get("open_time")
+    candle_close_time = row.get("close_time")
+    candle_meta = {
+        "signal_candle_open_time": candle_open_time.isoformat() if hasattr(candle_open_time, "isoformat") else str(candle_open_time),
+        "signal_candle_close_time": candle_close_time.isoformat() if hasattr(candle_close_time, "isoformat") else str(candle_close_time),
+        "signal_candle_confirmed": True,
+    }
 
     if strategy_type == "tdi_signal_reversal":
         tdi_state = get_tdi_sharkfin_state(df, last_index)
@@ -750,6 +816,7 @@ def get_current_signal_summary(strategy_type, df, settings, strategy=None):
             )
 
         return {
+            **candle_meta,
             "status": status,
             "action": action,
             "latest_close": round(row["close"], 4),
@@ -786,6 +853,7 @@ def get_current_signal_summary(strategy_type, df, settings, strategy=None):
             )
 
         return {
+            **candle_meta,
             "status": status,
             "action": action,
             "latest_close": round(row["close"], 4),
@@ -797,6 +865,7 @@ def get_current_signal_summary(strategy_type, df, settings, strategy=None):
 
     if signal:
         return {
+            **candle_meta,
             "status": signal.upper(),
             "action": f"{signal.upper()} SIGNAL ACTIVE",
             "latest_close": round(row["close"], 4),
@@ -806,6 +875,7 @@ def get_current_signal_summary(strategy_type, df, settings, strategy=None):
         }
 
     return {
+        **candle_meta,
         "status": "HOLD",
         "action": "NO ACTIVE ENTRY",
         "latest_close": round(row["close"], 4),
@@ -858,6 +928,11 @@ def run_backtest(
         settings,
         strategy=strategy,
     )
+    tdi_recent_signals_24h = (
+        get_recent_tdi_sharkfin_signals(df, hours=24)
+        if strategy_type == "tdi_signal_reversal"
+        else []
+    )
 
     buy_hold_return = (
         (df["close"].iloc[-1] - df["close"].iloc[0])
@@ -895,9 +970,11 @@ def run_backtest(
         if not in_trade:
             signal = get_signal(strategy_type, df, index, settings, strategy=strategy)
 
-            # Bottom-to-Top is spot-only. Its "short" signal is an exit/reduce
-            # instruction and must never open a synthetic short in the backtest.
-            if strategy_type == "tdi_bottom_to_top_reversal" and signal == "short":
+            # Spot-only strategy semantics:
+            # - TDI Sharkfin Reversal: WHITE BUY opens a long; WHITE SELL while
+            #   flat is not a synthetic short and is ignored.
+            # - Bottom-to-Top: its short signal is also reduce/exit only.
+            if strategy_type in ("tdi_signal_reversal", "tdi_bottom_to_top_reversal") and signal == "short":
                 signal = None
 
             if signal:
@@ -919,32 +996,22 @@ def run_backtest(
                 loss = row["deviation"] >= entry_dev + settings["stop_extension"]
 
             elif strategy_type == "tdi_signal_reversal":
-                # Original Pine white-label sharkfin stats use TP 1.0% and SL 0.5%.
-                tdi_take_profit_pct = 1.0
-                tdi_stop_loss_pct = 0.5
-                win = False
-                loss = False
+                # Exact spot adaptation of the uploaded Pine WHITE labels:
+                # WHITE BUY opens the position; WHITE SELL closes/reduces it.
+                # The Pine file's 1.0%/0.5% target-stop table is explicitly an
+                # historical outcome measurement, not the strategy's trade logic.
+                state = get_tdi_sharkfin_state(df, index)
+                white_sell_exit = bool(state.get("white_sell")) and trade_dir == "long"
 
-                if trade_dir == "long":
-                    win = close >= entry_price * (1 + tdi_take_profit_pct / 100)
-                    loss = close <= entry_price * (1 - tdi_stop_loss_pct / 100)
-
-                    if win:
-                        exit_reason = "tdi_white_signal_take_profit"
-                        raw_pnl_pct = ((close - entry_price) / entry_price) * 100
-                    elif loss:
-                        exit_reason = "tdi_white_signal_stop_loss"
-                        raw_pnl_pct = ((close - entry_price) / entry_price) * 100
+                if white_sell_exit:
+                    raw_pnl_pct = ((close - entry_price) / entry_price) * 100
+                    win = raw_pnl_pct >= 0
+                    loss = not win
+                    exit_reason = "tdi_white_sell_signal"
                 else:
-                    win = close <= entry_price * (1 - tdi_take_profit_pct / 100)
-                    loss = close >= entry_price * (1 + tdi_stop_loss_pct / 100)
-
-                    if win:
-                        exit_reason = "tdi_white_signal_take_profit"
-                        raw_pnl_pct = ((entry_price - close) / entry_price) * 100
-                    elif loss:
-                        exit_reason = "tdi_white_signal_stop_loss"
-                        raw_pnl_pct = ((entry_price - close) / entry_price) * 100
+                    win = False
+                    loss = False
+                    raw_pnl_pct = None
 
             elif strategy_type == "tdi_bottom_to_top_reversal":
                 state = get_tdi_bottom_to_top_state(df, index, strategy=strategy)
@@ -1203,6 +1270,8 @@ def run_backtest(
         "win_rate": f"{win_rate:.2f}%",
         "net_return": f"{net_return:.2f}%",
         "current_signal": current_signal,
+        "tdi_white_signals_24h_count": len(tdi_recent_signals_24h),
+        "tdi_white_signals_24h": tdi_recent_signals_24h,
         "first_half_return": f"{first_half_return:.2f}%",
         "second_half_return": f"{second_half_return:.2f}%",
         "consistency_gate": "PASS" if consistency_pass else "FAIL",

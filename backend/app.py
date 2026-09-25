@@ -86,6 +86,7 @@ def operator_status():
             "autonomous-start",
             "autonomous-stop",
             "execute-trade",
+            "manual-trade",
             "paper-portfolio-reset",
         ],
     }
@@ -169,6 +170,56 @@ SAVED_AGENT_SETUP = None
 # from the real TWAK wallet. Resetting the baseline overwrites this file.
 WALLET_BASELINE_STATE_FILE = STATE_DIR / "wallet_baseline_state.json"
 WALLET_BASELINE = None
+
+# Prevent one confirmed strategy candle from being executed repeatedly while it
+# remains the most recent closed candle (e.g. a 5M signal seen by a 1M loop).
+SIGNAL_EXECUTION_STATE_FILE = STATE_DIR / "signal_execution_state.json"
+
+
+def load_signal_execution_state():
+    try:
+        data = json.loads(SIGNAL_EXECUTION_STATE_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def build_strategy_signal_key(strategy, request, backtest, direction):
+    current_signal = (backtest or {}).get("current_signal") or {}
+    candle_close = current_signal.get("signal_candle_close_time") or "unknown_candle"
+    strategy_name = (strategy or {}).get("name") or request.selected_strategy or "unknown_strategy"
+    return "|".join([
+        str(strategy_name),
+        str(request.coin).upper(),
+        str(request.timeframe).upper(),
+        str(direction).lower(),
+        str(candle_close),
+    ])
+
+
+def strategy_signal_already_executed(signal_key):
+    if not signal_key:
+        return False
+    return load_signal_execution_state().get("last_executed_signal_key") == signal_key
+
+
+def mark_strategy_signal_executed(signal_key, strategy=None, request=None, backtest=None):
+    if not signal_key:
+        return
+    current_signal = (backtest or {}).get("current_signal") or {}
+    payload = {
+        "last_executed_signal_key": signal_key,
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+        "strategy": (strategy or {}).get("name"),
+        "coin": getattr(request, "coin", None),
+        "timeframe": getattr(request, "timeframe", None),
+        "signal": current_signal.get("status"),
+        "signal_candle_close_time": current_signal.get("signal_candle_close_time"),
+    }
+    try:
+        SIGNAL_EXECUTION_STATE_FILE.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def get_default_agent_setup():
@@ -344,6 +395,15 @@ class ExecuteTradeRequest(BaseModel):
     chain: str = "bsc"
     slippage: str = "1"
     quote_only: bool = True
+
+
+class ManualTradeRequest(BaseModel):
+    action: str
+    coin: str = "ETH"
+    amount: float = 1.0
+    chain: str = "bsc"
+    slippage: str = "1"
+    confirm_live: bool = False
 
 
 class PaperResetRequest(BaseModel):
@@ -2135,6 +2195,7 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
     hold_reason = None
     trade_plan = None
     execution_result = None
+    strategy_signal_key = None
     daily_qualification = get_daily_qualification_status()
 
     # Manual Override is truly strategy-only: do not inject a new forced/daily
@@ -2185,6 +2246,18 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         else:
             strategy_signal = get_strategy_signal_direction(backtest)
 
+        if strategy_only_mode and strategy_signal in {"long", "short"}:
+            strategy_signal_key = build_strategy_signal_key(strategy, request, backtest, strategy_signal)
+            if strategy_signal_already_executed(strategy_signal_key):
+                current_signal = (backtest or {}).get("current_signal") or {}
+                strategy_signal = None
+                decision = "HOLD"
+                hold_reason = (
+                    f"{strategy['name']} signal on confirmed candle "
+                    f"{current_signal.get('signal_candle_close_time') or 'unknown'} was already executed. "
+                    "Waiting for a new confirmed strategy signal."
+                )
+
         if strategy_signal == "long":
             decision = f"BUY_{target_token}"
             trade_amount = get_user_trade_amount(
@@ -2203,11 +2276,12 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                 "to_token": target_token,
                 "quote_only": not live_execution_enabled,
                 "reason": (
-                    f"{strategy['name']} produced a LONG signal on {request.coin} / {request.timeframe}. "
-                    "CMC market bias is used as confidence context, not as a hard blocker. "
-                    f"Strategy risk-adjusted score: {risk_score}. "
-                    f"USDT → {target_token} live execution allowed: {live_execution_enabled}."
+                    f"{strategy['name']} produced a LONG signal on the confirmed candle for {request.coin} / {request.timeframe}. "
+                    + ("MANUAL OVERRIDE: strategy signal only; external confidence context is bypassed. " if strategy_only_mode else "")
+                    + f"USDT → {target_token} live execution allowed: {live_execution_enabled}."
                 ),
+                "strategy_signal_key": strategy_signal_key,
+                "signal_candle_close_time": ((backtest.get("current_signal") or {}).get("signal_candle_close_time")),
             }
 
         elif strategy_signal == "short":
@@ -2222,8 +2296,10 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                     "from_token": target_token,
                     "to_token": "USDT",
                     "quote_only": not live_execution_enabled,
+                    "strategy_signal_key": strategy_signal_key,
+                    "signal_candle_close_time": ((backtest.get("current_signal") or {}).get("signal_candle_close_time")),
                     "reason": (
-                        f"{strategy['name']} produced a SELL / reduce-risk signal on {request.coin} / {request.timeframe}. "
+                        f"{strategy['name']} produced a SELL / reduce-risk signal on the confirmed candle for {request.coin} / {request.timeframe}. "
                         "This is spot-wallet logic, not a synthetic short. "
                         f"The agent already holds {target_token}, so it can reduce exposure via {target_token} → USDT. "
                         f"Live execution allowed: {live_execution_enabled}."
@@ -2304,6 +2380,9 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                 )
 
                 if execution_result.get("success") is True:
+                    if strategy_only_mode and strategy_signal_key and trade_plan.get("type") not in {"daily_qualification_trade", "daily_qualification_close"}:
+                        mark_strategy_signal_executed(strategy_signal_key, strategy=strategy, request=request, backtest=backtest)
+
                     if trade_plan.get("type") == "daily_qualification_trade":
                         current_price = safe_float(cmc_signal.get("price_usd"), 0)
                         DAILY_QUALIFICATION_STATE["open_forced_trade"] = {
@@ -2365,6 +2444,8 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                     if execution_result["success"] and not trade_plan["quote_only"]:
                         mark_live_trade_executed()
                         DAILY_QUALIFICATION_STATE["last_block_reason"] = None
+                        if strategy_only_mode and strategy_signal_key and trade_plan.get("type") not in {"daily_qualification_trade", "daily_qualification_close"}:
+                            mark_strategy_signal_executed(strategy_signal_key, strategy=strategy, request=request, backtest=backtest)
 
                         if trade_plan.get("type") == "daily_qualification_trade":
                             current_price = safe_float(cmc_signal.get("price_usd"), 0)
@@ -2424,6 +2505,8 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                 "strategy_source_file": strategy.get("source_file"),
                 "strategy_type": strategy.get("type"),
                 "current_signal": (backtest.get("current_signal") or {}).get("status"),
+                "signal_candle_close_time": (backtest.get("current_signal") or {}).get("signal_candle_close_time"),
+                "strategy_signal_key": strategy_signal_key,
                 "trade_plan_created": trade_plan is not None,
                 "execution_blocked": bool((execution_result or {}).get("blocked")),
             },
@@ -2482,6 +2565,124 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
         "trade_size": request.trade_size,
         "trade_plan": trade_plan,
         "execution_result": execution_result,
+        "event": event,
+    }
+
+
+@app.post("/manual-trade")
+def manual_trade(request: ManualTradeRequest, _operator_ok: bool = Depends(require_operator_key)):
+    """Explicit operator-controlled live trade used to verify the TWAK route.
+
+    This endpoint is intentionally separate from the autonomous kill switch. It
+    requires operator authentication, an explicit live confirmation, a stopped
+    autonomous agent, wallet verification, balance checks, and normal trade-safety
+    limits. BUY amount is USDT. EXIT amount is units of the selected asset.
+    """
+    if not request.confirm_live:
+        raise HTTPException(status_code=400, detail="Manual live trade requires confirm_live=true.")
+
+    if AUTONOMOUS_STATE.get("running"):
+        return {
+            "success": False,
+            "mode": "blocked",
+            "safety_message": "Blocked: stop the autonomous agent before using manual BUY/EXIT test controls.",
+        }
+
+    action = str(request.action or "").strip().lower()
+    target_token = normalize_trade_token(request.coin)
+    if target_token == "USDT" or action not in {"buy", "exit", "sell"}:
+        raise HTTPException(status_code=400, detail="Use action=buy or action=exit with a non-USDT asset.")
+
+    amount = safe_float(request.amount, 0.0)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Manual trade amount must be greater than zero.")
+
+    wallet_ok, wallet_message = validate_live_wallet_identity()
+    if not wallet_ok:
+        return {
+            "success": False,
+            "mode": "blocked",
+            "safety_message": f"Blocked: {wallet_message}",
+            "twak_status": get_twak_status(),
+        }
+
+    portfolio_result = run_twak_portfolio(address=get_configured_agent_address())
+    portfolio_items = extract_portfolio_items(portfolio_result)
+    if not portfolio_result.get("success") or not portfolio_items:
+        return {
+            "success": False,
+            "mode": "blocked",
+            "safety_message": "Blocked: live TWAK portfolio could not be verified before manual trade.",
+            "portfolio": portfolio_result,
+        }
+
+    balances = {
+        str(item.get("symbol", "")).upper(): safe_float(item.get("balance", 0), 0.0)
+        for item in portfolio_items
+    }
+
+    if action == "buy":
+        from_token, to_token = "USDT", target_token
+    else:
+        from_token, to_token = target_token, "USDT"
+
+    available = balances.get(from_token, 0.0)
+    if available < amount:
+        return {
+            "success": False,
+            "mode": "blocked",
+            "safety_message": f"Blocked: manual {action.upper()} needs {amount} {from_token}, wallet has {available}.",
+            "available_balance": available,
+        }
+
+    amount_text = str(round(amount, 8))
+    allowed, safety_message = validate_trade_request(
+        amount=amount_text,
+        from_token=from_token,
+        to_token=to_token,
+        quote_only=False,
+    )
+    if not allowed:
+        return {"success": False, "mode": "blocked", "safety_message": safety_message}
+
+    result = run_twak_swap(
+        amount=amount_text,
+        from_token=from_token,
+        to_token=to_token,
+        chain=request.chain,
+        slippage=request.slippage,
+        quote_only=False,
+        password=os.getenv("TWAK_WALLET_PASSWORD"),
+    )
+    result = attach_tx_hash(result)
+    result["mode"] = "manual_live_test"
+    result["executed"] = bool(result.get("success"))
+
+    if result.get("success"):
+        mark_live_trade_executed()
+
+    event = log_trade({
+        "status": "manual_trade_success" if result.get("success") else "manual_trade_failed",
+        "source": "manual_operator_test",
+        "action": action,
+        "coin": target_token,
+        "amount": amount_text,
+        "from_token": from_token,
+        "to_token": to_token,
+        "execution_result": result,
+        "safety_message": safety_message,
+    })
+
+    return {
+        "success": bool(result.get("success")),
+        "mode": "manual_live_test",
+        "action": action,
+        "coin": target_token,
+        "amount": amount_text,
+        "from_token": from_token,
+        "to_token": to_token,
+        "safety_message": safety_message,
+        "result": result,
         "event": event,
     }
 

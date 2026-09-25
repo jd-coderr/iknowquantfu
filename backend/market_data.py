@@ -55,6 +55,12 @@ def fetch_binance_klines(symbol: str, interval: str = "4h", limit: int = 500):
     df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
     df["close_time"] = pd.to_datetime(df["close_time"], unit="ms")
 
+    # Binance includes the currently forming candle in /klines. Trading decisions
+    # must use confirmed candles only; otherwise a 5M sharkfin on the candle that
+    # just closed can be missed because the next unfinished candle becomes df[-1].
+    now_utc = pd.Timestamp.now(tz="UTC").tz_localize(None)
+    df = df[df["close_time"] <= now_utc].copy()
+
     numeric_columns = [
         "open",
         "high",
@@ -73,7 +79,10 @@ def fetch_binance_klines(symbol: str, interval: str = "4h", limit: int = 500):
 
     if df.empty:
         raise RuntimeError(
-            f"Binance kline lookup produced no valid numeric candles for {params['symbol']} {interval}."
+            f"Binance kline lookup produced no valid CLOSED numeric candles for {params['symbol']} {interval}."
         )
 
-    return df
+    # Preserve source diagnostics without changing the existing dataframe API.
+    df.attrs["source_url"] = used_url
+    df.attrs["closed_candles_only"] = True
+    return df.reset_index(drop=True)
