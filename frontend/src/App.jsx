@@ -59,6 +59,9 @@ function App() {
   const [timeframe, setTimeframe] = useState(() => getSavedSetting("ikqf_timeframe", "5M"));
   const [risk, setRisk] = useState(() => getSavedSetting("ikqf_risk", "medium"));
   const [tradeSize, setTradeSize] = useState(() => getSavedNumberSetting("ikqf_trade_size", 0.001));
+  const [manualTestBuyUsdt, setManualTestBuyUsdt] = useState(() => getSavedNumberSetting("ikqf_manual_test_buy_usdt", 1.0));
+  const [manualTestExitAmount, setManualTestExitAmount] = useState(() => getSavedNumberSetting("ikqf_manual_test_exit_amount", 0.001));
+  const [manualTestRunning, setManualTestRunning] = useState(false);
   const [initialCapital, setInitialCapital] = useState(() => getSavedNumberSetting("ikqf_initial_capital", 10000));
   const [result, setResult] = useState(null);
   const [agentResult, setAgentResult] = useState(null);
@@ -746,6 +749,79 @@ function App() {
     return "STANDARD / UNLOCKED";
   }
 
+  async function runManualLiveTrade(action) {
+    const normalizedAction = String(action || "").toLowerCase();
+    const actionLabel = normalizedAction === "buy" ? "MANUAL BUY TEST" : "MANUAL EXIT TEST";
+
+    if (!requireOperatorMode(actionLabel)) return;
+    if (!requireAgentStopped(actionLabel)) return;
+    if (!isManualOverrideActive()) {
+      alert("APPLY MANUAL OVERRIDE FIRST.");
+      return;
+    }
+
+    const targetCoin = String(getResolvedCoin() || coin || "").toUpperCase();
+    if (!targetCoin || targetCoin === "AUTO" || targetCoin === "USDT") {
+      alert("SELECT A REAL ASSET BEFORE RUNNING A MANUAL LIVE TEST.");
+      return;
+    }
+
+    const amount = normalizedAction === "buy"
+      ? Number(manualTestBuyUsdt)
+      : Number(manualTestExitAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("ENTER A VALID MANUAL TEST AMOUNT.");
+      return;
+    }
+
+    const units = normalizedAction === "buy" ? "USDT" : targetCoin;
+    const route = normalizedAction === "buy"
+      ? `USDT → ${targetCoin}`
+      : `${targetCoin} → USDT`;
+
+    const confirmed = window.confirm(
+      `${actionLabel} — REAL ON-CHAIN TRADE\n\n` +
+      `ROUTE: ${route}\n` +
+      `AMOUNT: ${amount} ${units}\n\n` +
+      "This bypasses the strategy signal only so you can verify TWAK execution. " +
+      "Wallet identity, balance, cooldown and trade-safety limits still apply. Continue?"
+    );
+    if (!confirmed) return;
+
+    setManualTestRunning(true);
+    try {
+      const response = await fetch(`${API_BASE}/manual-trade`, {
+        method: "POST",
+        headers: getOperatorHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          action: normalizedAction,
+          coin: targetCoin,
+          amount,
+          chain: "bsc",
+          slippage: "1",
+          confirm_live: true,
+        }),
+      });
+
+      if (await handleLockedResponse(response)) return;
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.safety_message || data?.detail || data?.message || "Manual live trade failed.");
+      }
+
+      await loadPortfolio();
+      await loadTradeHistory();
+      const txHash = data?.result?.tx_hash || data?.result?.transaction_hash || "NOT RETURNED";
+      alert(`${actionLabel} EXECUTED\n${route}\nTX: ${txHash}`);
+    } catch (error) {
+      console.error(error);
+      alert(`${actionLabel} FAILED: ${error?.message || error}`);
+    } finally {
+      setManualTestRunning(false);
+    }
+  }
+
   function renderManualOverridePanel() {
     const manualActive = isManualOverrideActive();
     const v2Active = strategyControlMode === "v2" || isAutoStrategyLabel(manualStrategy);
@@ -808,6 +884,52 @@ function App() {
               background: rgba(95, 0, 0, 0.88) !important;
               color: #ffdede !important;
               box-shadow: 0 0 10px rgba(255, 30, 30, 0.45) !important;
+            }
+
+            .manual-live-test-box {
+              margin-top: 12px;
+              padding: 10px;
+              border: 2px dashed #ff6868;
+              background: rgba(25, 0, 0, 0.72);
+              box-shadow: inset 0 0 18px rgba(255, 0, 0, 0.18), 0 0 14px rgba(255, 30, 30, 0.34);
+            }
+            .manual-live-test-title {
+              color: #ffffff;
+              font-weight: bold;
+              margin-bottom: 7px;
+              text-shadow: 0 0 8px #ff3333;
+            }
+            .manual-live-test-warning {
+              color: #ffbdbd;
+              margin-bottom: 9px;
+              line-height: 1.3;
+            }
+            .manual-live-test-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 8px;
+            }
+            .manual-live-test-grid input {
+              width: 100%;
+              box-sizing: border-box;
+              border: 1px solid #ff6666 !important;
+              color: #ffffff !important;
+              background: rgba(60, 0, 0, 0.9) !important;
+            }
+            .manual-live-test-btn {
+              width: 100% !important;
+              min-height: 38px;
+              margin-top: 6px;
+              border: 2px solid #ff4c4c !important;
+              color: #ffffff !important;
+              background: rgba(180, 0, 0, 0.86) !important;
+              box-shadow: 0 0 14px rgba(255, 0, 0, 0.55) !important;
+            }
+            .manual-live-test-btn:hover {
+              background: rgba(235, 0, 0, 0.96) !important;
+            }
+            @media (max-width: 720px) {
+              .manual-live-test-grid { grid-template-columns: 1fr; }
             }
           `}</style>
         )}
@@ -922,6 +1044,55 @@ function App() {
             CLEAR MANUAL OVERRIDE
           </button>
         </div>
+
+        {manualActive && (
+          <div className="manual-live-test-box">
+            <div className="manual-live-test-title">MANUAL LIVE EXECUTION TEST</div>
+            <div className="manual-live-test-warning">
+              Stop the autonomous agent first. These buttons send a REAL TWAK trade and bypass only the strategy signal so you can verify execution.
+            </div>
+            <div className="manual-live-test-grid">
+              <div>
+                <label>BUY TEST — USDT AMOUNT</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.1"
+                  value={manualTestBuyUsdt}
+                  disabled={manualTestRunning || isAgentRunning()}
+                  onChange={(e) => setManualTestBuyUsdt(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="manual-live-test-btn"
+                  disabled={manualTestRunning || isAgentRunning() || !operatorUnlocked}
+                  onClick={() => runManualLiveTrade("buy")}
+                >
+                  {manualTestRunning ? "WORKING..." : `> MANUAL BUY TEST ${String(getResolvedCoin() || coin).toUpperCase()} <`}
+                </button>
+              </div>
+              <div>
+                <label>EXIT TEST — ASSET AMOUNT</label>
+                <input
+                  type="number"
+                  min="0.00000001"
+                  step="0.0001"
+                  value={manualTestExitAmount}
+                  disabled={manualTestRunning || isAgentRunning()}
+                  onChange={(e) => setManualTestExitAmount(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="manual-live-test-btn"
+                  disabled={manualTestRunning || isAgentRunning() || !operatorUnlocked}
+                  onClick={() => runManualLiveTrade("exit")}
+                >
+                  {manualTestRunning ? "WORKING..." : `> MANUAL EXIT TEST ${String(getResolvedCoin() || coin).toUpperCase()} <`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -4215,6 +4386,11 @@ async function loadTradeHistory() {
                           ? `${tradePlan.from_token || trade.from_token} → ${tradePlan.to_token || trade.to_token}`
                           : null;
                       const tradeSizeValue = trade.amount || trade.trade_plan?.amount || "N/A";
+                      const currentSignal = trade?.backtest?.current_signal || {};
+                      const tdiState = currentSignal?.tdi || {};
+                      const signalCandle = currentSignal?.signal_candle_close_time || trade?.diagnostics?.signal_candle_close_time || null;
+                      const recentTdiSignals = Array.isArray(trade?.backtest?.tdi_white_signals_24h) ? trade.backtest.tdi_white_signals_24h : [];
+                      const latestRecentTdiSignal = recentTdiSignals.length ? recentTdiSignals[recentTdiSignals.length - 1] : null;
 
                       return (
                         <div key={index} className="retro-log-entry">
@@ -4228,6 +4404,19 @@ async function loadTradeHistory() {
                             STRATEGY: {trade.selected_strategy || trade.active_strategy || trade.strategy || trade.trade_plan?.selected_strategy || trade.trade_plan?.strategy || "N/A"}
                           </p>
                           <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TIMEFRAME: {trade.timeframe || trade.trade_plan?.timeframe || trade.active_config?.timeframe || getActiveTimeframeLabel()}</p>
+                          {signalCandle && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>SIGNAL CANDLE CLOSE: {formatDateTime(signalCandle)}</p>}
+                          {tdiState?.tdi_fast !== undefined && (
+                            <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>
+                              TDI FAST [2→1→0]: {tdiState.tdi_fast_prev_2} → {tdiState.tdi_fast_prev_1} → {tdiState.tdi_fast}
+                              {` / WHITE BUY ${tdiState.white_buy ? "YES" : "NO"} / WHITE SELL ${tdiState.white_sell ? "YES" : "NO"}`}
+                            </p>
+                          )}
+                          {trade?.backtest?.strategy_type === "tdi_signal_reversal" && (
+                            <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>
+                              TDI WHITE SIGNALS LAST 24H: {trade?.backtest?.tdi_white_signals_24h_count ?? recentTdiSignals.length}
+                              {latestRecentTdiSignal ? ` / LATEST ${latestRecentTdiSignal.direction} ${formatDateTime(latestRecentTdiSignal.close_time)}` : ""}
+                            </p>
+                          )}
                           {trade.strategy_only_mode === true
                             ? <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TRADE CONFIDENCE: BYPASSED — MANUAL STRATEGY ONLY</p>
                             : (trade.confidence_score !== undefined && trade.confidence_score !== null && <p style={{ color: isRealTrade ? "#9cff8f" : "#808080" }}>TRADE CONFIDENCE: {trade.confidence_score} / 100</p>)}
