@@ -1,33 +1,42 @@
 {
   "name": "TDI Sharkfin Reversal",
   "type": "tdi_signal_reversal",
+  "version": "pine_white_labels_spot_exact",
+  "description": "Spot strategy based only on the original white BUY and white SELL sharkfin labels from the uploaded TDI Sharkfin and Divergence Suite. Turquoise wait crosses, divergences, Bollinger-band events, and other TDI conditions are not trade triggers.",
+  "source_indicator": {
+    "name": "TDI Sharkfin and Divergence Suite x",
+    "fast_ma": "ta.sma(ta.rsi(close, 13), 2)",
+    "band_low": 32,
+    "band_high": 68
+  },
   "entry": {
-    "condition": "Enter only on the original white-label TDI sharkfin signal: fast TDI curls upward while still below 32 for a buy, or curls downward while still above 68 for a sell/reduce signal.",
-    "default_threshold": "Long: 3-bar fast-TDI sharkfin below 32. Sell/reduce: 3-bar fast-TDI sharkfin above 68."
+    "condition": "WHITE BUY only: fastMA[2] < 32 AND fastMA[1] > fastMA[2] AND fastMA > fastMA[1] AND fastMA < 32.",
+    "action": "Buy the selected spot asset with USDT on a confirmed white BUY signal."
+  },
+  "exit": {
+    "condition": "WHITE SELL only: fastMA[2] > 68 AND fastMA[1] < fastMA[2] AND fastMA < fastMA[1] AND fastMA > 68.",
+    "action": "Sell/reduce the selected spot asset to USDT on a confirmed white SELL signal if the wallet holds the asset."
   },
   "confirmation": {
-    "condition": "The fast TDI must form the original three-bar sharkfin sequence. Turquoise crosses are wait markers and are not trade signals.",
-    "default_threshold": "White-label sharkfin only; no TDI Bollinger-band triggers."
+    "condition": "The three-bar white sharkfin label itself is the confirmation. No additional CMC, Fear & Greed, optimizer, divergence, Bollinger-band, volume, or turquoise-cross confirmation is required in Manual Override."
   },
-  "take_profit": {
-    "condition": "Backtest/live strategy statistics use a 1.0% price take-profit for the white-label signal.",
-    "default_threshold": "1.0% price take-profit"
-  },
-  "stop_loss": {
-    "condition": "Backtest/live strategy statistics use a 0.5% price stop-loss for the white-label signal.",
-    "default_threshold": "0.5% price stop-loss"
+  "ignored_signals": [
+    "bandBuySignal turquoise wait cross",
+    "bandSellSignal turquoise wait cross",
+    "M/W divergence",
+    "peak/valley divergence",
+    "TDI Bollinger-band events",
+    "signal-line-only events"
+  ],
+  "historical_table_measurement_only": {
+    "take_profit_percent": 1.0,
+    "stop_loss_percent": 0.5,
+    "note": "These values belong to the Pine indicator's simplified historical outcome table and are not live entry/exit rules for this strategy."
   },
   "risk_governor": {
-    "max_open_trades": 1,
-    "risk_per_trade": "1%",
-    "stop_after_consecutive_losses": 2,
-    "avoid_low_volume_conditions": true,
-    "requires_extreme_band_condition": true,
-    "allowed_entry_triggers": [
-      "fixed_32_sharkfin_long",
-      "fixed_68_sharkfin_short"
-    ],
-    "primary_exit": "price_take_profit_1_0pct_or_stop_loss_0_5pct",
-    "spot_wallet_rule": "Long buys USDT to selected token. Sell/exit reduces selected token to USDT only if the wallet already holds the token."
+    "spot_only": true,
+    "synthetic_shorts": false,
+    "sell_while_flat": "ignore",
+    "signal_source": "white BUY / white SELL labels only"
   }
 }
