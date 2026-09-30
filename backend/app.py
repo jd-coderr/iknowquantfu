@@ -2198,26 +2198,24 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
     strategy_signal_key = None
     daily_qualification = get_daily_qualification_status()
 
-    # Manual Override is truly strategy-only: do not inject a new forced/daily
-    # qualification entry over the selected strategy. Existing forced positions
-    # may still be closed safely below if one was opened before manual mode.
+    # MANUAL OVERRIDE is a hard strategy-only mode. The daily qualification
+    # subsystem may be displayed, but it has zero execution authority here.
     if strategy_only_mode:
         daily_guard_should_trade = False
-        daily_guard_reason = "MANUAL OVERRIDE: daily qualification entries are bypassed; only the selected strategy can open a new trade."
+        forced_close_plan = None
+        daily_guard_reason = (
+            f"MANUAL OVERRIDE: {strategy['name']} is the sole trade-signal authority. "
+            "CMC/Fear & Greed/altcoin sentiment, IKQF v2, optimizer ranking, "
+            "daily qualification entries, and daily qualification forced closes are BYPASSED."
+        )
     else:
         daily_guard_should_trade, daily_guard_reason = should_force_daily_qualification_trade(
             live_execution_enabled=live_execution_enabled
         )
-    forced_close_plan = maybe_build_forced_trade_close_plan(
-        request,
-        cmc_signal,
-        live_execution_enabled=live_execution_enabled,
-    )
-
-    if strategy_only_mode and forced_close_plan is None:
-        daily_guard_reason = (
-            f"MANUAL OVERRIDE: {strategy['name']} is the only source allowed to open a new trade. "
-            "AUTO/V2/CMC confidence gates and daily qualification entries are bypassed."
+        forced_close_plan = maybe_build_forced_trade_close_plan(
+            request,
+            cmc_signal,
+            live_execution_enabled=live_execution_enabled,
         )
 
     if forced_close_plan is not None:
@@ -2351,11 +2349,19 @@ def agent_cycle(request: AgentCycleRequest, _operator_ok: bool = Depends(require
                 )
 
     if trade_plan is not None:
-        if live_execution_enabled and risk_control["status"] == "DRAWDOWN LIMIT BREACHED":
+        # Drawdown protection blocks only NEW exposure. A strategy SELL/exit back
+        # to USDT must remain possible so risk can actually be reduced.
+        drawdown_blocks_trade = (
+            live_execution_enabled
+            and risk_control["status"] == "DRAWDOWN LIMIT BREACHED"
+            and str(trade_plan.get("from_token", "")).upper() == "USDT"
+        )
+
+        if drawdown_blocks_trade:
             execution_result = {
                 "success": False,
                 "blocked": True,
-                "safety_message": "Blocked: max drawdown limit breached.",
+                "safety_message": "Blocked: max drawdown limit breached; new exposure is disabled. Exits to USDT remain allowed.",
                 "risk_control": risk_control,
             }
             DAILY_QUALIFICATION_STATE["last_block_reason"] = execution_result["safety_message"]
