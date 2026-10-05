@@ -1688,11 +1688,12 @@ def generate_strategy(request: StrategyRequest, _operator_ok: bool = Depends(req
             f"{strategy['name']} for {request.coin} on the {request.timeframe} "
             f"timeframe using a {request.risk} risk profile."
         ),
-        "entry": strategy["entry"],
-        "confirmation": strategy["confirmation"],
-        "take_profit": strategy["take_profit"],
-        "stop_loss": strategy["stop_loss"],
-        "risk_governor": strategy["risk_governor"],
+        "entry": strategy.get("entry"),
+        "exit": strategy.get("exit"),
+        "confirmation": strategy.get("confirmation"),
+        "take_profit": strategy.get("take_profit"),
+        "stop_loss": strategy.get("stop_loss"),
+        "risk_governor": strategy.get("risk_governor", {}),
         "backtest": backtest,
     }
 
@@ -1801,11 +1802,12 @@ def optimize_strategy(request: OptimizeRequest, _operator_ok: bool = Depends(req
                         "type": strategy["type"],
                         "risk_adjusted_score": backtest["risk_adjusted_score"],
                         "backtest": backtest,
-                        "entry": strategy["entry"],
-                        "confirmation": strategy["confirmation"],
-                        "take_profit": strategy["take_profit"],
-                        "stop_loss": strategy["stop_loss"],
-                        "risk_governor": strategy["risk_governor"],
+                        "entry": strategy.get("entry"),
+                        "exit": strategy.get("exit"),
+                        "confirmation": strategy.get("confirmation"),
+                        "take_profit": strategy.get("take_profit"),
+                        "stop_loss": strategy.get("stop_loss"),
+                        "risk_governor": strategy.get("risk_governor", {}),
                     }
                 )
 
